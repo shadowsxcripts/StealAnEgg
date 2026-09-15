@@ -1,0 +1,300 @@
+-- Shadow Hub V4 | Steal An Egg! (Dynamic Multi-Area Support)
+-- Powered by Rayfield UI Library
+
+local Rayfield
+local success, err = pcall(function()
+    Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+end)
+
+if not success or not Rayfield then
+    warn("[Shadow Hub] Failed to load Rayfield UI library:", err)
+    return
+end
+
+-- Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+local hasFireSignal = typeof(firesignal) == "function"
+
+-- Network Endpoints
+local Packages = ReplicatedStorage:WaitForChild("Packages", 10)
+local Networking = Packages and Packages:WaitForChild("Networking", 10)
+
+local RaritiesShownEvent = Networking and Networking:WaitForChild("RE/EggWorld/FieldEggRaritiesShown", 5)
+local AskCarryFunction = Networking and Networking:WaitForChild("RF/EggWorld/AskFieldEggCarry", 5)
+local CarryEvent = Networking and Networking:WaitForChild("RE/EggWorld/FieldEggCarry", 5)
+
+-- Dynamic Target State (No hardcoded area/slot defaults)
+local TargetEgg = {
+    Uid = "",
+    FirstAreaSlotKey = "",
+    AreaId = "",
+    AssetCategory = "Searching...",
+    Income = "+0/s"
+}
+
+local FeatureFlags = {
+    AutoSteal = false,
+    AntiStun = false,
+    WalkSpeedBoost = 16
+}
+
+-- Player Location Helpers
+local SavedSpawnCFrame = nil
+local function SaveSpawnPosition()
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then SavedSpawnCFrame = hrp.CFrame end
+end
+SaveSpawnPosition()
+
+local function GetHRP()
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+-- Dynamic Player Base / Safe Zone Detector
+local function GetPlayerBaseCFrame()
+    local bases = Workspace:FindFirstChild("Bases") or Workspace:FindFirstChild("Plots") or Workspace:FindFirstChild("BasesFolder")
+    if bases then
+        for _, base in pairs(bases:GetChildren()) do
+            local owner = base:FindFirstChild("Owner") or base:GetAttribute("Owner")
+            if owner == LocalPlayer.Name or owner == LocalPlayer.UserId then
+                return base:GetPivot() + Vector3.new(0, 4, 0)
+            end
+        end
+    end
+    
+    local safeZone = Workspace:FindFirstChild("SafeZone", true) or Workspace:FindFirstChild("SpawnLocation", true)
+    if safeZone and safeZone:IsA("PVInstance") then
+        return safeZone:GetPivot() + Vector3.new(0, 4, 0)
+    end
+
+    return SavedSpawnCFrame or CFrame.new(0, 50, 0)
+end
+
+-- Dynamic Egg Model Scanner (Finds egg in ANY map area)
+local function FindEggModel()
+    -- 1. Try finding by FirstAreaSlotKey if available
+    if TargetEgg.FirstAreaSlotKey ~= "" then
+        local slotModel = Workspace:FindFirstChild(TargetEgg.FirstAreaSlotKey, true)
+        if slotModel and slotModel:IsA("PVInstance") then
+            return slotModel
+        end
+    end
+
+    -- 2. Try searching within the specific Area folder if specified
+    if TargetEgg.AreaId ~= "" then
+        local areaFolder = Workspace:FindFirstChild(TargetEgg.AreaId, true)
+        if areaFolder then
+            local eggInArea = areaFolder:FindFirstChild(TargetEgg.AssetCategory, true) or areaFolder:FindFirstChild(TargetEgg.Uid, true)
+            if eggInArea and eggInArea:IsA("PVInstance") then
+                return eggInArea
+            end
+        end
+    end
+
+    -- 3. Fallback: Search full Workspace for UID or Asset Name
+    if TargetEgg.Uid ~= "" then
+        for _, obj in pairs(Workspace:GetDescendants()) do
+            if obj.Name == TargetEgg.Uid or obj.Name == TargetEgg.AssetCategory then
+                if obj:IsA("PVInstance") then return obj end
+            end
+        end
+    end
+
+    return nil
+end
+
+-- Create Rayfield Interface
+local Window = Rayfield:CreateWindow({
+   Name = "Shadow Hub V4 | Steal An Egg!",
+   Icon = 0,
+   LoadingTitle = "Shadow Hub Loading...",
+   LoadingSubtitle = "Universal Dynamic Area Support",
+   Theme = "DarkBlue",
+   ConfigurationSaving = { Enabled = true, FolderName = "ShadowHub", FileName = "StealAnEggV4" },
+   KeySystem = false
+})
+
+local StealTab = Window:CreateTab("Auto Stealer", 4483362458)
+local ModsTab = Window:CreateTab("Player Mods", 4483362458)
+
+StealTab:CreateSection("Live Egg Detector")
+
+local InfoDisplay = StealTab:CreateParagraph({
+    Title = "Target: None Detected",
+    Content = "Listening for live network egg spawns..."
+})
+
+local function UpdateDisplay()
+    InfoDisplay:Set({
+        Title = "Rarest Egg: " .. TargetEgg.AssetCategory,
+        Content = string.format(
+            "Detected Area: %s\nSlot Key: %s\nIncome: %s\nUID: %s",
+            (TargetEgg.AreaId ~= "" and TargetEgg.AreaId or "Unknown"),
+            (TargetEgg.FirstAreaSlotKey ~= "" and TargetEgg.FirstAreaSlotKey or "Dynamic"),
+            TargetEgg.Income,
+            TargetEgg.Uid
+        )
+    })
+end
+
+-- Dynamic Payload Listener
+if RaritiesShownEvent then
+    RaritiesShownEvent.OnClientEvent:Connect(function(data)
+        if type(data) == "table" and data.RareSpawns then
+            local topEgg = data.RareSpawns[1]
+            if topEgg then
+                -- Extract keys dynamically without hardcoded fallbacks
+                TargetEgg.Uid = topEgg.Uid or topEgg.UID or ""
+                TargetEgg.FirstAreaSlotKey = topEgg.FirstAreaSlotKey or topEgg.SlotKey or ""
+                TargetEgg.AreaId = topEgg.AreaId or topEgg.Area or ""
+                TargetEgg.AssetCategory = topEgg.AssetCategory or topEgg.Name or "Unknown Egg"
+                TargetEgg.Income = topEgg.MoneyPerSec or topEgg.Income or "+0/s"
+
+                -- Extract AreaId from SlotKey if AreaId was left blank (e.g., "Desert:Slot_005" -> "Desert")
+                if TargetEgg.AreaId == "" and TargetEgg.FirstAreaSlotKey:find(":") then
+                    TargetEgg.AreaId = TargetEgg.FirstAreaSlotKey:split(":")[1]
+                end
+
+                Rayfield:Notify({
+                   Title = "Rare Egg Spawned!",
+                   Content = TargetEgg.AssetCategory .. " in " .. (TargetEgg.AreaId ~= "" and TargetEgg.AreaId or "Map Area"),
+                   Duration = 3
+                })
+                UpdateDisplay()
+            end
+        end
+    end)
+end
+
+-- Dynamic Steal Sequence
+local function ExecuteStealSequence()
+    local hrp = GetHRP()
+    if not hrp or TargetEgg.Uid == "" then return end
+
+    -- 1. Locate and Teleport to Egg anywhere on map
+    local eggInstance = FindEggModel()
+    if eggInstance then
+        hrp.CFrame = eggInstance:GetPivot() + Vector3.new(0, 3, 0)
+    end
+    task.wait(0.4)
+
+    -- 2. Send Carry Request with dynamic payload keys
+    pcall(function()
+        if AskCarryFunction then
+            AskCarryFunction:InvokeServer({
+                FirstAreaSlotKey = TargetEgg.FirstAreaSlotKey,
+                Uid = TargetEgg.Uid
+            })
+        end
+    end)
+
+    if hasFireSignal and CarryEvent then
+        pcall(function()
+            firesignal(CarryEvent.OnClientEvent, {
+                SpeedMultiplier = 1.0,
+                Uid = TargetEgg.Uid,
+                GuardDisabled = false,
+                RunBackWakeDelayRequired = true,
+                AssetCategory = TargetEgg.AssetCategory,
+                IsCarrying = true,
+                AreaId = TargetEgg.AreaId
+            })
+        end)
+    end
+    task.wait(0.4)
+
+    -- 3. Teleport back to Player Base
+    hrp.CFrame = GetPlayerBaseCFrame()
+end
+
+-- Controls
+StealTab:CreateSection("Manual Actions")
+
+StealTab:CreateButton({
+   Name = "Steal Target Egg",
+   Callback = function()
+       ExecuteStealSequence()
+   end,
+})
+
+StealTab:CreateButton({
+   Name = "Teleport to Player Base",
+   Callback = function()
+       local hrp = GetHRP()
+       if hrp then hrp.CFrame = GetPlayerBaseCFrame() end
+   end,
+})
+
+StealTab:CreateSection("Automation")
+
+local AutoLoopThread = nil
+StealTab:CreateToggle({
+   Name = "Auto Steal Loop (All Areas)",
+   CurrentValue = false,
+   Flag = "AutoStealLoop",
+   Callback = function(State)
+      FeatureFlags.AutoSteal = State
+      
+      if AutoLoopThread then
+          task.cancel(AutoLoopThread)
+          AutoLoopThread = nil
+      end
+
+      if State then
+          AutoLoopThread = task.spawn(function()
+              while FeatureFlags.AutoSteal do
+                  if TargetEgg.Uid ~= "" then
+                      ExecuteStealSequence()
+                  end
+                  task.wait(3.0)
+              end
+          end)
+      end
+   end,
+})
+
+-- Player Mods
+ModsTab:CreateSection("Movement & Anti-Stun")
+
+ModsTab:CreateToggle({
+   Name = "Anti Stun / Anti Ragdoll",
+   CurrentValue = false,
+   Flag = "AntiStunToggle",
+   Callback = function(State)
+      FeatureFlags.AntiStun = State
+   end,
+})
+
+ModsTab:CreateSlider({
+   Name = "WalkSpeed Multiplier",
+   Range = {16, 100},
+   Increment = 1,
+   Suffix = " Speed",
+   CurrentValue = 16,
+   Flag = "SpeedSlider",
+   Callback = function(Value)
+      FeatureFlags.WalkSpeedBoost = Value
+   end,
+})
+
+RunService.Stepped:Connect(function()
+    local char = LocalPlayer.Character
+    local humanoid = char and char:FindFirstChild("Humanoid")
+    if humanoid then
+        if FeatureFlags.AntiStun then
+            if humanoid:GetState() == Enum.HumanoidStateType.PlatformStanding or humanoid:GetState() == Enum.HumanoidStateType.Ragdoll then
+                humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+        end
+        if FeatureFlags.WalkSpeedBoost > 16 then
+            humanoid.WalkSpeed = FeatureFlags.WalkSpeedBoost
+        end
+    end
+end)
