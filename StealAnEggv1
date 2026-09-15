@@ -1,5 +1,5 @@
--- SHADOW HUB V6 | ULTRA-STABLE & ERROR-PROOF
--- Compatible with Steal An Egg!
+-- SHADOW HUB V9 | AUTO-RUN & RAREST EGG HUNTER
+-- Custom Payload Integration for Steal An Egg!
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,18 +8,40 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 
--- Safe UI Container Protection
+-- Custom Icon Web Asset Setup
+local CUSTOM_ICON_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS0vFoOUwLf4teA0D3aqQERugsl-NIIWe3BBdkebSR2DvBsr7-Ifh3oQtz7&s=10"
+
+local function FetchImage(url)
+    if type(url) ~= "string" or url == "" then return "" end
+    if url:find("http") and getcustomasset and writefile then
+        local filename = "ShadowHub_Icon.png"
+        local success = pcall(function()
+            if not (isfile and isfile(filename)) then
+                writefile(filename, game:HttpGet(url))
+            end
+        end)
+        if success then
+            local assetSuccess, assetId = pcall(function() return getcustomasset(filename) end)
+            if assetSuccess then return assetId end
+        end
+    end
+    return url
+end
+
+local LoadedIcon = FetchImage(CUSTOM_ICON_URL)
+
+-- Safe UI Container Safeguard
 local ParentContainer = nil
 pcall(function() ParentContainer = gethui() end)
 if not ParentContainer then
     pcall(function() ParentContainer = game:GetService("CoreGui") end)
 end
 if not ParentContainer then
-    ParentContainer = LocalPlayer:WaitForChild("PlayerGui", 5)
+    ParentContainer = LocalPlayer:WaitForChild("PlayerGui", 10)
 end
 
-if ParentContainer and ParentContainer:FindFirstChild("ShadowHub_V6") then
-    ParentContainer.ShadowHub_V6:Destroy()
+if ParentContainer and ParentContainer:FindFirstChild("ShadowHub_V9") then
+    ParentContainer.ShadowHub_V9:Destroy()
 end
 
 -- Network References
@@ -31,7 +53,8 @@ local AskCarryFunction = Networking and Networking:WaitForChild("RF/EggWorld/Ask
 local CarryEvent = Networking and Networking:WaitForChild("RE/EggWorld/FieldEggCarry", 5)
 
 -- State Variables
-local RareEggList = {}
+local MIN_INCOME_THRESHOLD = 1000000 -- $1M/s minimum filter
+local EggPool = {}
 local ClaimedEggs = {}
 local AutoStealEnabled = false
 local AutoThread = nil
@@ -39,15 +62,115 @@ local AutoThread = nil
 local CurrentTarget = {
     Uid = "",
     SlotKey = "",
-    AreaId = "",
+    AreaId = "Forest",
     Name = "Scanning...",
     Rarity = "None",
     Income = "+0/s",
-    AssetId = "rbxassetid://1789465698045"
+    AssetId = LoadedIcon,
+    Instance = nil
 }
 
 --------------------------------------------------------------------------------
--- UTILITY & DRAG SYSTEM (No Deprecated Functions)
+-- NUMBER PARSER & WORKSPACE RADAR
+--------------------------------------------------------------------------------
+
+local function ParseIncomeNumber(str)
+    if not str then return 0 end
+    local text = tostring(str):upper():gsub(",", "")
+    local numStr = text:match("[%d%.]+")
+    if not numStr then return 0 end
+    local num = tonumber(numStr) or 0
+    
+    if text:find("T") then num = num * 1e12
+    elseif text:find("B") then num = num * 1e9
+    elseif text:find("M") then num = num * 1e6
+    elseif text:find("K") then num = num * 1e3 end
+    
+    return num
+end
+
+local function ScanPhysicalEggs()
+    local detected = {}
+    for _, desc in pairs(Workspace:GetDescendants()) do
+        if desc:IsA("PVInstance") or desc:IsA("Folder") or desc:IsA("Configuration") then
+            local uid = desc:GetAttribute("Uid") or desc:GetAttribute("UID")
+            local slotKey = desc:GetAttribute("FirstAreaSlotKey") or desc:GetAttribute("SlotKey") or desc.Name
+            local category = desc:GetAttribute("AssetCategory") or desc:GetAttribute("Name")
+            local income = desc:GetAttribute("MoneyPerSec") or desc:GetAttribute("Income")
+            local rarity = desc:GetAttribute("Rarity")
+            local areaId = desc:GetAttribute("AreaId") or slotKey:split(":")[1] or "Forest"
+            
+            if not uid and (desc.Name:find("Egg_") or desc.Name:find("Slot_")) then
+                uid = desc.Name
+            end
+
+            if uid and not ClaimedEggs[tostring(uid)] then
+                table.insert(detected, {
+                    Uid = tostring(uid),
+                    FirstAreaSlotKey = tostring(slotKey),
+                    AreaId = tostring(areaId),
+                    AssetCategory = tostring(category or desc.Name),
+                    Rarity = tostring(rarity or "Rare"),
+                    MoneyPerSec = tostring(income or "+0/s"),
+                    AssetId = LoadedIcon,
+                    Instance = desc:IsA("PVInstance") and desc or desc.Parent
+                })
+            end
+        end
+    end
+    return detected
+end
+
+-- Rarest Egg Priority Evaluator
+local function EvaluateRarestEgg()
+    local rawList = {}
+    for _, egg in ipairs(EggPool) do table.insert(rawList, egg) end
+    for _, egg in ipairs(ScanPhysicalEggs()) do table.insert(rawList, egg) end
+    
+    local candidates = {}
+    local seenUids = {}
+    
+    for _, egg in ipairs(rawList) do
+        local uid = egg.Uid or egg.UID or ""
+        if uid ~= "" and not ClaimedEggs[uid] and not seenUids[uid] then
+            seenUids[uid] = true
+            local incomeVal = ParseIncomeNumber(egg.MoneyPerSec or egg.Income)
+            if incomeVal >= MIN_INCOME_THRESHOLD then
+                egg.ParsedIncome = incomeVal
+                table.insert(candidates, egg)
+            end
+        end
+    end
+
+    -- Sort strictly by highest value / rarest spawn
+    table.sort(candidates, function(a, b)
+        return a.ParsedIncome > b.ParsedIncome
+    end)
+
+    if #candidates > 0 then
+        local top = candidates[1]
+        CurrentTarget.Uid = top.Uid or top.UID or ""
+        CurrentTarget.SlotKey = top.FirstAreaSlotKey or top.SlotKey or ""
+        CurrentTarget.AreaId = top.AreaId or (CurrentTarget.SlotKey:split(":")[1] or "Forest")
+        CurrentTarget.Name = top.AssetCategory or top.Name or "Burrowing Owl"
+        CurrentTarget.Rarity = top.Rarity or "Rare"
+        CurrentTarget.Income = top.MoneyPerSec or top.Income or "+1M/s"
+        CurrentTarget.AssetId = FetchImage(top.AssetId) ~= "" and FetchImage(top.AssetId) or LoadedIcon
+        CurrentTarget.Instance = top.Instance
+        return true
+    end
+
+    CurrentTarget.Uid = ""
+    CurrentTarget.Name = "No Rare Eggs Found"
+    CurrentTarget.Rarity = "None"
+    CurrentTarget.Income = "+0/s"
+    CurrentTarget.AssetId = LoadedIcon
+    CurrentTarget.Instance = nil
+    return false
+end
+
+--------------------------------------------------------------------------------
+-- GUI CONSTRUCTION
 --------------------------------------------------------------------------------
 
 local function MakeDraggable(Frame, DragHandle)
@@ -61,9 +184,7 @@ local function MakeDraggable(Frame, DragHandle)
             StartPos = Frame.Position
 
             input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    Dragging = false
-                end
+                if input.UserInputState == Enum.UserInputState.End then Dragging = false end
             end)
         end
     end)
@@ -84,55 +205,16 @@ local function MakeDraggable(Frame, DragHandle)
     end)
 end
 
-local function GetHRP()
-    local Char = LocalPlayer.Character
-    if not Char then return nil end
-    return Char:FindFirstChild("HumanoidRootPart")
-end
-
---------------------------------------------------------------------------------
--- EGG QUEUE LOGIC (Automatic Fallback to 2nd Best Egg)
---------------------------------------------------------------------------------
-
-local function EvaluateQueue()
-    if #RareEggList == 0 then return false end
-
-    for _, eggData in ipairs(RareEggList) do
-        local uid = eggData.Uid or eggData.UID or ""
-        if uid ~= "" and not ClaimedEggs[uid] then
-            CurrentTarget.Uid = uid
-            CurrentTarget.SlotKey = eggData.FirstAreaSlotKey or eggData.SlotKey or ""
-            CurrentTarget.AreaId = eggData.AreaId or eggData.Area or (CurrentTarget.SlotKey:split(":")[1] or "")
-            CurrentTarget.Name = eggData.AssetCategory or eggData.Name or "Unknown Egg"
-            CurrentTarget.Rarity = eggData.Rarity or "Rare"
-            CurrentTarget.Income = eggData.MoneyPerSec or eggData.Income or "+150/s"
-            CurrentTarget.AssetId = eggData.AssetId or eggData.Image or "rbxassetid://1789465698045"
-            return true
-        end
-    end
-
-    CurrentTarget.Uid = ""
-    CurrentTarget.Name = "No Eggs Available"
-    CurrentTarget.Rarity = "None"
-    CurrentTarget.Income = "+0/s"
-    return false
-end
-
---------------------------------------------------------------------------------
--- GUI CONSTRUCTION
---------------------------------------------------------------------------------
-
 local MainScreen = Instance.new("ScreenGui")
-MainScreen.Name = "ShadowHub_V6"
+MainScreen.Name = "ShadowHub_V9"
 MainScreen.ResetOnSpawn = false
 MainScreen.Parent = ParentContainer
 
--- Floating Toggle Icon
 local ToggleIcon = Instance.new("ImageButton")
 ToggleIcon.Name = "ToggleIcon"
 ToggleIcon.Size = UDim2.new(0, 54, 0, 54)
 ToggleIcon.Position = UDim2.new(0.03, 0, 0.35, 0)
-ToggleIcon.Image = "rbxassetid://1789465698045"
+ToggleIcon.Image = LoadedIcon
 ToggleIcon.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
 ToggleIcon.Parent = MainScreen
 
@@ -140,10 +222,8 @@ Instance.new("UICorner", ToggleIcon).CornerRadius = UDim.new(0, 14)
 local IconStroke = Instance.new("UIStroke", ToggleIcon)
 IconStroke.Color = Color3.fromRGB(120, 80, 255)
 IconStroke.Thickness = 2
-
 MakeDraggable(ToggleIcon)
 
--- Main Hub Window
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 360, 0, 250)
@@ -155,20 +235,17 @@ Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 16)
 local FrameStroke = Instance.new("UIStroke", MainFrame)
 FrameStroke.Color = Color3.fromRGB(120, 80, 255)
 FrameStroke.Thickness = 2
-
 MakeDraggable(MainFrame)
 
--- Title Header
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 35)
 Title.BackgroundTransparency = 1
-Title.Text = "SHADOW HUB"
+Title.Text = "⚡ SHADOW HUNTER V9 ⚡"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.TextSize = 16
+Title.TextSize = 14
 Title.Font = Enum.Font.GothamBold
 Title.Parent = MainFrame
 
--- Top Left: Egg Photo & Rarity Card
 local PhotoCard = Instance.new("Frame")
 PhotoCard.Size = UDim2.new(0.44, 0, 0.42, 0)
 PhotoCard.Position = UDim2.new(0.04, 0, 0.16, 0)
@@ -177,8 +254,8 @@ PhotoCard.Parent = MainFrame
 Instance.new("UICorner", PhotoCard).CornerRadius = UDim.new(0, 10)
 
 local EggImg = Instance.new("ImageLabel")
-EggImg.Size = UDim2.new(0, 48, 0, 48)
-EggImg.Position = UDim2.new(0.5, -24, 0.08, 0)
+EggImg.Size = UDim2.new(0, 50, 0, 50)
+EggImg.Position = UDim2.new(0.5, -25, 0.08, 0)
 EggImg.BackgroundTransparency = 1
 EggImg.Image = CurrentTarget.AssetId
 EggImg.Parent = PhotoCard
@@ -193,7 +270,6 @@ RarityText.TextSize = 11
 RarityText.Font = Enum.Font.GothamMedium
 RarityText.Parent = PhotoCard
 
--- Top Right: Money/Sec Card
 local IncomeCard = Instance.new("Frame")
 IncomeCard.Size = UDim2.new(0.44, 0, 0.42, 0)
 IncomeCard.Position = UDim2.new(0.52, 0, 0.16, 0)
@@ -221,7 +297,6 @@ IncomeValue.TextSize = 16
 IncomeValue.Font = Enum.Font.GothamBold
 IncomeValue.Parent = IncomeCard
 
--- Middle: Name Card
 local NameCard = Instance.new("Frame")
 NameCard.Size = UDim2.new(0.92, 0, 0.16, 0)
 NameCard.Position = UDim2.new(0.04, 0, 0.61, 0)
@@ -232,18 +307,17 @@ Instance.new("UICorner", NameCard).CornerRadius = UDim.new(0, 10)
 local NameText = Instance.new("TextLabel")
 NameText.Size = UDim2.new(1, 0, 1, 0)
 NameText.BackgroundTransparency = 1
-NameText.Text = "Egg: " .. CurrentTarget.Name
+NameText.Text = "Target: " .. CurrentTarget.Name
 NameText.TextColor3 = Color3.fromRGB(255, 255, 255)
 NameText.TextSize = 13
 NameText.Font = Enum.Font.GothamBold
 NameText.Parent = NameCard
 
--- Bottom: Toggle Button
 local ActionBtn = Instance.new("TextButton")
 ActionBtn.Size = UDim2.new(0.92, 0, 0.16, 0)
 ActionBtn.Position = UDim2.new(0.04, 0, 0.80, 0)
 ActionBtn.BackgroundColor3 = Color3.fromRGB(120, 80, 255)
-ActionBtn.Text = "AUTO GET EGG: OFF"
+ActionBtn.Text = "AUTO HUNTER: OFF"
 ActionBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 ActionBtn.TextSize = 12
 ActionBtn.Font = Enum.Font.GothamBold
@@ -251,11 +325,11 @@ ActionBtn.Parent = MainFrame
 Instance.new("UICorner", ActionBtn).CornerRadius = UDim.new(0, 10)
 
 --------------------------------------------------------------------------------
--- REFRESH & HANDLERS
+-- REFRESH & NAVIGATION HELPERS
 --------------------------------------------------------------------------------
 
 local function RefreshUI()
-    NameText.Text = "Egg: " .. CurrentTarget.Name
+    NameText.Text = "Target: " .. CurrentTarget.Name
     RarityText.Text = "Rarity: " .. CurrentTarget.Rarity
     IncomeValue.Text = CurrentTarget.Income
     EggImg.Image = CurrentTarget.AssetId
@@ -265,21 +339,23 @@ ToggleIcon.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
 end)
 
+-- Auto Detect New Spawns Instantly
 if RaritiesShownEvent then
     RaritiesShownEvent.OnClientEvent:Connect(function(data)
         if type(data) == "table" and data.RareSpawns then
-            RareEggList = data.RareSpawns
-            EvaluateQueue()
+            EggPool = data.RareSpawns
+            EvaluateRarestEgg()
             RefreshUI()
         end
     end)
 end
 
---------------------------------------------------------------------------------
--- SAFE TELEPORT & AUTOMATION LOOP
---------------------------------------------------------------------------------
+local function GetHRP()
+    local Char = LocalPlayer.Character
+    return Char and Char:FindFirstChild("HumanoidRootPart")
+end
 
-local function FindPlayerBaseCFrame()
+local function GetSafeZoneCFrame()
     local Plots = Workspace:FindFirstChild("Bases") or Workspace:FindFirstChild("Plots")
     if Plots then
         for _, plot in pairs(Plots:GetChildren()) do
@@ -299,29 +375,51 @@ local function FindPlayerBaseCFrame()
     return hrp and hrp.CFrame or CFrame.new(0, 50, 0)
 end
 
-local function ExecuteSteal()
+-- Smooth Movement to Target Egg (Runs smoothly through map)
+local function SmoothMoveTo(targetCFrame)
+    local hrp = GetHRP()
+    if not hrp then return end
+    
+    local distance = (targetCFrame.Position - hrp.Position).Magnitude
+    local travelTime = math.clamp(distance / 50, 0.15, 0.8)
+    
+    local tween = TweenService:Create(hrp, TweenInfo.new(travelTime, Enum.EasingStyle.Linear), {
+        CFrame = targetCFrame + Vector3.new(0, 3, 0)
+    })
+    tween:Play()
+    tween.Completed:Wait()
+end
+
+--------------------------------------------------------------------------------
+-- RUN TO RAREST EGG & EXECUTE REMOTES
+--------------------------------------------------------------------------------
+
+local function ExecuteRarestEggHunter()
     local hrp = GetHRP()
     if not hrp or CurrentTarget.Uid == "" then return end
 
-    -- 1. Locate and Teleport to Egg Model
-    local targetInstance = nil
-    if CurrentTarget.SlotKey ~= "" then
-        targetInstance = Workspace:FindFirstChild(CurrentTarget.SlotKey, true)
+    -- 1. Locate Physical Model (in Forest / Map)
+    local targetInst = CurrentTarget.Instance
+    if not targetInst and CurrentTarget.SlotKey ~= "" then
+        targetInst = Workspace:FindFirstChild(CurrentTarget.SlotKey, true)
     end
-    if not targetInstance then
-        targetInstance = Workspace:FindFirstChild(CurrentTarget.Uid, true)
+    if not targetInst then
+        targetInst = Workspace:FindFirstChild(CurrentTarget.Uid, true)
     end
 
-    if targetInstance and targetInstance:IsA("PVInstance") then
-        hrp.CFrame = targetInstance:GetPivot() + Vector3.new(0, 3, 0)
+    -- 2. Run to the Best Egg Location
+    if targetInst and targetInst:IsA("PVInstance") then
+        SmoothMoveTo(targetInst:GetPivot())
+    else
+        hrp.CFrame = hrp.CFrame + Vector3.new(0, 2, 0)
     end
-    task.wait(0.3)
+    task.wait(0.15)
 
-    -- 2. Remote Handshake (Safely Wrapped)
+    -- 3. Execute Invokes & Remotes with Payload Data
     pcall(function()
         if AskCarryFunction then
             AskCarryFunction:InvokeServer({
-                FirstAreaSlotKey = CurrentTarget.SlotKey,
+                FirstAreaSlotKey = CurrentTarget.SlotKey ~= "" and CurrentTarget.SlotKey or "Forest:Slot_002",
                 Uid = CurrentTarget.Uid
             })
         end
@@ -330,7 +428,7 @@ local function ExecuteSteal()
     if typeof(firesignal) == "function" and CarryEvent then
         pcall(function()
             firesignal(CarryEvent.OnClientEvent, {
-                SpeedMultiplier = 1.0,
+                SpeedMultiplier = 0.95044861554791,
                 Uid = CurrentTarget.Uid,
                 GuardDisabled = false,
                 RunBackWakeDelayRequired = true,
@@ -340,40 +438,38 @@ local function ExecuteSteal()
             })
         end)
     end
-    task.wait(0.3)
+    task.wait(0.2)
 
-    -- 3. Return to Safe Base
-    local baseCFrame = FindPlayerBaseCFrame()
-    if hrp then
-        hrp.CFrame = baseCFrame
-    end
+    -- 4. Smooth Return to Safe Zone / Base
+    SmoothMoveTo(GetSafeZoneCFrame())
 
-    -- 4. Mark Collected & Instantly Auto-Select Next Best Egg
+    -- 5. Blacklist Collected Egg and Auto-Target Next Rarest Egg
     ClaimedEggs[CurrentTarget.Uid] = true
-    EvaluateQueue()
+    EvaluateRarestEgg()
     RefreshUI()
 end
 
+-- Automation Loop Switch
 ActionBtn.MouseButton1Click:Connect(function()
     AutoStealEnabled = not AutoStealEnabled
 
     if AutoStealEnabled then
-        ActionBtn.Text = "AUTO GET EGG: ON"
+        ActionBtn.Text = "AUTO HUNTER: ON"
         ActionBtn.BackgroundColor3 = Color3.fromRGB(40, 190, 90)
 
         AutoThread = task.spawn(function()
             while AutoStealEnabled do
+                EvaluateRarestEgg()
+                RefreshUI()
+
                 if CurrentTarget.Uid ~= "" and not ClaimedEggs[CurrentTarget.Uid] then
-                    ExecuteSteal()
-                else
-                    EvaluateQueue()
-                    RefreshUI()
+                    ExecuteRarestEggHunter()
                 end
-                task.wait(2.5)
+                task.wait(1.8)
             end
         end)
     else
-        ActionBtn.Text = "AUTO GET EGG: OFF"
+        ActionBtn.Text = "AUTO HUNTER: OFF"
         ActionBtn.BackgroundColor3 = Color3.fromRGB(120, 80, 255)
 
         if AutoThread then
@@ -382,3 +478,7 @@ ActionBtn.MouseButton1Click:Connect(function()
         end
     end
 end)
+
+-- Initial Execution Check
+EvaluateRarestEgg()
+RefreshUI()
