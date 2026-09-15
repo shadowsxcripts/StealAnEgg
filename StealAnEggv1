@@ -1,5 +1,5 @@
--- SHADOW HUB V9 | AUTO-RUN & RAREST EGG HUNTER
--- Custom Payload Integration for Steal An Egg!
+-- SHADOW HUB V10 | AUTO-REMOTE SPY & RAREST EGG HUNTER
+-- Automatically hooks network remotes to guarantee payload accuracy
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,40 +8,34 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 
--- Custom Icon Web Asset Setup
+-- Custom Asset Loader
 local CUSTOM_ICON_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS0vFoOUwLf4teA0D3aqQERugsl-NIIWe3BBdkebSR2DvBsr7-Ifh3oQtz7&s=10"
 
 local function FetchImage(url)
     if type(url) ~= "string" or url == "" then return "" end
     if url:find("http") and getcustomasset and writefile then
         local filename = "ShadowHub_Icon.png"
-        local success = pcall(function()
+        pcall(function()
             if not (isfile and isfile(filename)) then
                 writefile(filename, game:HttpGet(url))
             end
         end)
-        if success then
-            local assetSuccess, assetId = pcall(function() return getcustomasset(filename) end)
-            if assetSuccess then return assetId end
-        end
+        local assetSuccess, assetId = pcall(function() return getcustomasset(filename) end)
+        if assetSuccess then return assetId end
     end
     return url
 end
 
 local LoadedIcon = FetchImage(CUSTOM_ICON_URL)
 
--- Safe UI Container Safeguard
+-- Container Protection
 local ParentContainer = nil
 pcall(function() ParentContainer = gethui() end)
-if not ParentContainer then
-    pcall(function() ParentContainer = game:GetService("CoreGui") end)
-end
-if not ParentContainer then
-    ParentContainer = LocalPlayer:WaitForChild("PlayerGui", 10)
-end
+if not ParentContainer then pcall(function() ParentContainer = game:GetService("CoreGui") end) end
+if not ParentContainer then ParentContainer = LocalPlayer:WaitForChild("PlayerGui", 10) end
 
-if ParentContainer and ParentContainer:FindFirstChild("ShadowHub_V9") then
-    ParentContainer.ShadowHub_V9:Destroy()
+if ParentContainer and ParentContainer:FindFirstChild("ShadowHub_V10") then
+    ParentContainer.ShadowHub_V10:Destroy()
 end
 
 -- Network References
@@ -52,8 +46,48 @@ local RaritiesShownEvent = Networking and Networking:WaitForChild("RE/EggWorld/F
 local AskCarryFunction = Networking and Networking:WaitForChild("RF/EggWorld/AskFieldEggCarry", 5)
 local CarryEvent = Networking and Networking:WaitForChild("RE/EggWorld/FieldEggCarry", 5)
 
--- State Variables
-local MIN_INCOME_THRESHOLD = 1000000 -- $1M/s minimum filter
+--------------------------------------------------------------------------------
+-- INTEGRATED AUTOMATED REMOTE SPY / METATABLE HOOK
+--------------------------------------------------------------------------------
+
+local CapturedAskTemplate = nil
+local CapturedCarryTemplate = nil
+local SpyStatusText = "Spy: Standby (Using Default)"
+
+-- Client Event Listener (Captures incoming remote data dynamically)
+if CarryEvent then
+    CarryEvent.OnClientEvent:Connect(function(data)
+        if type(data) == "table" and data.Uid then
+            CapturedCarryTemplate = data
+            SpyStatusText = "Spy: Active (Payload Intercepted)"
+        end
+    end)
+end
+
+-- Metatable Hooking (Interprets outgoing server calls from legitimate gameplay)
+if typeof(hookmetamethod) == "function" then
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+
+        if not checkcaller() then
+            if (method == "InvokeServer" or method == "invokeServer") and self == AskCarryFunction then
+                if type(args[1]) == "table" then
+                    CapturedAskTemplate = args[1]
+                    SpyStatusText = "Spy: Captured Ask Payload"
+                end
+            end
+        end
+        return oldNamecall(self, ...)
+    end))
+end
+
+--------------------------------------------------------------------------------
+-- RADAR & QUEUE SYSTEM ($1M+ FILTER)
+--------------------------------------------------------------------------------
+
+local MIN_INCOME_THRESHOLD = 1000000
 local EggPool = {}
 local ClaimedEggs = {}
 local AutoStealEnabled = false
@@ -69,10 +103,6 @@ local CurrentTarget = {
     AssetId = LoadedIcon,
     Instance = nil
 }
-
---------------------------------------------------------------------------------
--- NUMBER PARSER & WORKSPACE RADAR
---------------------------------------------------------------------------------
 
 local function ParseIncomeNumber(str)
     if not str then return 0 end
@@ -121,7 +151,6 @@ local function ScanPhysicalEggs()
     return detected
 end
 
--- Rarest Egg Priority Evaluator
 local function EvaluateRarestEgg()
     local rawList = {}
     for _, egg in ipairs(EggPool) do table.insert(rawList, egg) end
@@ -142,7 +171,6 @@ local function EvaluateRarestEgg()
         end
     end
 
-    -- Sort strictly by highest value / rarest spawn
     table.sort(candidates, function(a, b)
         return a.ParsedIncome > b.ParsedIncome
     end)
@@ -161,7 +189,7 @@ local function EvaluateRarestEgg()
     end
 
     CurrentTarget.Uid = ""
-    CurrentTarget.Name = "No Rare Eggs Found"
+    CurrentTarget.Name = "No Eggs >= $1M"
     CurrentTarget.Rarity = "None"
     CurrentTarget.Income = "+0/s"
     CurrentTarget.AssetId = LoadedIcon
@@ -170,7 +198,7 @@ local function EvaluateRarestEgg()
 end
 
 --------------------------------------------------------------------------------
--- GUI CONSTRUCTION
+-- GUI INTERACTION & DRAGGER
 --------------------------------------------------------------------------------
 
 local function MakeDraggable(Frame, DragHandle)
@@ -206,7 +234,7 @@ local function MakeDraggable(Frame, DragHandle)
 end
 
 local MainScreen = Instance.new("ScreenGui")
-MainScreen.Name = "ShadowHub_V9"
+MainScreen.Name = "ShadowHub_V10"
 MainScreen.ResetOnSpawn = false
 MainScreen.Parent = ParentContainer
 
@@ -217,7 +245,6 @@ ToggleIcon.Position = UDim2.new(0.03, 0, 0.35, 0)
 ToggleIcon.Image = LoadedIcon
 ToggleIcon.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
 ToggleIcon.Parent = MainScreen
-
 Instance.new("UICorner", ToggleIcon).CornerRadius = UDim.new(0, 14)
 local IconStroke = Instance.new("UIStroke", ToggleIcon)
 IconStroke.Color = Color3.fromRGB(120, 80, 255)
@@ -226,11 +253,10 @@ MakeDraggable(ToggleIcon)
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 360, 0, 250)
-MainFrame.Position = UDim2.new(0.5, -180, 0.5, -125)
+MainFrame.Size = UDim2.new(0, 360, 0, 270)
+MainFrame.Position = UDim2.new(0.5, -180, 0.5, -135)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
 MainFrame.Parent = MainScreen
-
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 16)
 local FrameStroke = Instance.new("UIStroke", MainFrame)
 FrameStroke.Color = Color3.fromRGB(120, 80, 255)
@@ -238,47 +264,57 @@ FrameStroke.Thickness = 2
 MakeDraggable(MainFrame)
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 35)
+Title.Size = UDim2.new(1, 0, 0, 30)
 Title.BackgroundTransparency = 1
-Title.Text = "⚡ SHADOW HUNTER V9 ⚡"
+Title.Text = "SHADOW HUB V10 (SPY INTEGRATED)"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.TextSize = 14
+Title.TextSize = 13
 Title.Font = Enum.Font.GothamBold
 Title.Parent = MainFrame
 
+local SpyLabel = Instance.new("TextLabel")
+SpyLabel.Size = UDim2.new(1, 0, 0, 15)
+SpyLabel.Position = UDim2.new(0, 0, 0.1, 0)
+SpyLabel.BackgroundTransparency = 1
+SpyLabel.Text = SpyStatusText
+SpyLabel.TextColor3 = Color3.fromRGB(120, 220, 255)
+SpyLabel.TextSize = 10
+SpyLabel.Font = Enum.Font.GothamMedium
+SpyLabel.Parent = MainFrame
+
 local PhotoCard = Instance.new("Frame")
-PhotoCard.Size = UDim2.new(0.44, 0, 0.42, 0)
-PhotoCard.Position = UDim2.new(0.04, 0, 0.16, 0)
+PhotoCard.Size = UDim2.new(0.44, 0, 0.38, 0)
+PhotoCard.Position = UDim2.new(0.04, 0, 0.18, 0)
 PhotoCard.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
 PhotoCard.Parent = MainFrame
 Instance.new("UICorner", PhotoCard).CornerRadius = UDim.new(0, 10)
 
 local EggImg = Instance.new("ImageLabel")
-EggImg.Size = UDim2.new(0, 50, 0, 50)
-EggImg.Position = UDim2.new(0.5, -25, 0.08, 0)
+EggImg.Size = UDim2.new(0, 48, 0, 48)
+EggImg.Position = UDim2.new(0.5, -24, 0.08, 0)
 EggImg.BackgroundTransparency = 1
 EggImg.Image = CurrentTarget.AssetId
 EggImg.Parent = PhotoCard
 
 local RarityText = Instance.new("TextLabel")
-RarityText.Size = UDim2.new(1, 0, 0, 20)
+RarityText.Size = UDim2.new(1, 0, 0, 18)
 RarityText.Position = UDim2.new(0, 0, 0.7, 0)
 RarityText.BackgroundTransparency = 1
 RarityText.Text = "Rarity: " .. CurrentTarget.Rarity
 RarityText.TextColor3 = Color3.fromRGB(190, 190, 220)
-RarityText.TextSize = 11
+RarityText.TextSize = 10
 RarityText.Font = Enum.Font.GothamMedium
 RarityText.Parent = PhotoCard
 
 local IncomeCard = Instance.new("Frame")
-IncomeCard.Size = UDim2.new(0.44, 0, 0.42, 0)
-IncomeCard.Position = UDim2.new(0.52, 0, 0.16, 0)
+IncomeCard.Size = UDim2.new(0.44, 0, 0.38, 0)
+IncomeCard.Position = UDim2.new(0.52, 0, 0.18, 0)
 IncomeCard.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
 IncomeCard.Parent = MainFrame
 Instance.new("UICorner", IncomeCard).CornerRadius = UDim.new(0, 10)
 
 local IncomeHeader = Instance.new("TextLabel")
-IncomeHeader.Size = UDim2.new(1, 0, 0, 20)
+IncomeHeader.Size = UDim2.new(1, 0, 0, 18)
 IncomeHeader.Position = UDim2.new(0, 0, 0.1, 0)
 IncomeHeader.BackgroundTransparency = 1
 IncomeHeader.Text = "EARNINGS / SEC"
@@ -288,18 +324,18 @@ IncomeHeader.Font = Enum.Font.GothamBold
 IncomeHeader.Parent = IncomeCard
 
 local IncomeValue = Instance.new("TextLabel")
-IncomeValue.Size = UDim2.new(1, 0, 0, 30)
+IncomeValue.Size = UDim2.new(1, 0, 0, 25)
 IncomeValue.Position = UDim2.new(0, 0, 0.45, 0)
 IncomeValue.BackgroundTransparency = 1
 IncomeValue.Text = CurrentTarget.Income
 IncomeValue.TextColor3 = Color3.fromRGB(80, 255, 140)
-IncomeValue.TextSize = 16
+IncomeValue.TextSize = 15
 IncomeValue.Font = Enum.Font.GothamBold
 IncomeValue.Parent = IncomeCard
 
 local NameCard = Instance.new("Frame")
-NameCard.Size = UDim2.new(0.92, 0, 0.16, 0)
-NameCard.Position = UDim2.new(0.04, 0, 0.61, 0)
+NameCard.Size = UDim2.new(0.92, 0, 0.15, 0)
+NameCard.Position = UDim2.new(0.04, 0, 0.59, 0)
 NameCard.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
 NameCard.Parent = MainFrame
 Instance.new("UICorner", NameCard).CornerRadius = UDim.new(0, 10)
@@ -309,13 +345,13 @@ NameText.Size = UDim2.new(1, 0, 1, 0)
 NameText.BackgroundTransparency = 1
 NameText.Text = "Target: " .. CurrentTarget.Name
 NameText.TextColor3 = Color3.fromRGB(255, 255, 255)
-NameText.TextSize = 13
+NameText.TextSize = 12
 NameText.Font = Enum.Font.GothamBold
 NameText.Parent = NameCard
 
 local ActionBtn = Instance.new("TextButton")
 ActionBtn.Size = UDim2.new(0.92, 0, 0.16, 0)
-ActionBtn.Position = UDim2.new(0.04, 0, 0.80, 0)
+ActionBtn.Position = UDim2.new(0.04, 0, 0.77, 0)
 ActionBtn.BackgroundColor3 = Color3.fromRGB(120, 80, 255)
 ActionBtn.Text = "AUTO HUNTER: OFF"
 ActionBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -325,7 +361,7 @@ ActionBtn.Parent = MainFrame
 Instance.new("UICorner", ActionBtn).CornerRadius = UDim.new(0, 10)
 
 --------------------------------------------------------------------------------
--- REFRESH & NAVIGATION HELPERS
+-- STEAL EXECUTION WITH SPY PAYLOAD SYNCHRONIZATION
 --------------------------------------------------------------------------------
 
 local function RefreshUI()
@@ -333,13 +369,11 @@ local function RefreshUI()
     RarityText.Text = "Rarity: " .. CurrentTarget.Rarity
     IncomeValue.Text = CurrentTarget.Income
     EggImg.Image = CurrentTarget.AssetId
+    SpyLabel.Text = SpyStatusText
 end
 
-ToggleIcon.MouseButton1Click:Connect(function()
-    MainFrame.Visible = not MainFrame.Visible
-end)
+ToggleIcon.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
 
--- Auto Detect New Spawns Instantly
 if RaritiesShownEvent then
     RaritiesShownEvent.OnClientEvent:Connect(function(data)
         if type(data) == "table" and data.RareSpawns then
@@ -375,7 +409,6 @@ local function GetSafeZoneCFrame()
     return hrp and hrp.CFrame or CFrame.new(0, 50, 0)
 end
 
--- Smooth Movement to Target Egg (Runs smoothly through map)
 local function SmoothMoveTo(targetCFrame)
     local hrp = GetHRP()
     if not hrp then return end
@@ -390,15 +423,10 @@ local function SmoothMoveTo(targetCFrame)
     tween.Completed:Wait()
 end
 
---------------------------------------------------------------------------------
--- RUN TO RAREST EGG & EXECUTE REMOTES
---------------------------------------------------------------------------------
-
 local function ExecuteRarestEggHunter()
     local hrp = GetHRP()
     if not hrp or CurrentTarget.Uid == "" then return end
 
-    -- 1. Locate Physical Model (in Forest / Map)
     local targetInst = CurrentTarget.Instance
     if not targetInst and CurrentTarget.SlotKey ~= "" then
         targetInst = Workspace:FindFirstChild(CurrentTarget.SlotKey, true)
@@ -407,7 +435,6 @@ local function ExecuteRarestEggHunter()
         targetInst = Workspace:FindFirstChild(CurrentTarget.Uid, true)
     end
 
-    -- 2. Run to the Best Egg Location
     if targetInst and targetInst:IsA("PVInstance") then
         SmoothMoveTo(targetInst:GetPivot())
     else
@@ -415,41 +442,49 @@ local function ExecuteRarestEggHunter()
     end
     task.wait(0.15)
 
-    -- 3. Execute Invokes & Remotes with Payload Data
+    -- Dynamic Remote Spy Assembly for AskFieldEggCarry
+    local askPayload = CapturedAskTemplate and table.clone(CapturedAskTemplate) or {
+        FirstAreaSlotKey = CurrentTarget.SlotKey ~= "" and CurrentTarget.SlotKey or "Forest:Slot_002",
+        Uid = CurrentTarget.Uid
+    }
+    askPayload.FirstAreaSlotKey = CurrentTarget.SlotKey ~= "" and CurrentTarget.SlotKey or askPayload.FirstAreaSlotKey
+    askPayload.Uid = CurrentTarget.Uid
+
     pcall(function()
         if AskCarryFunction then
-            AskCarryFunction:InvokeServer({
-                FirstAreaSlotKey = CurrentTarget.SlotKey ~= "" and CurrentTarget.SlotKey or "Forest:Slot_002",
-                Uid = CurrentTarget.Uid
-            })
+            AskCarryFunction:InvokeServer(askPayload)
         end
     end)
 
+    -- Dynamic Remote Spy Assembly for FieldEggCarry
+    local carryPayload = CapturedCarryTemplate and table.clone(CapturedCarryTemplate) or {
+        SpeedMultiplier = 0.95044861554791,
+        Uid = CurrentTarget.Uid,
+        GuardDisabled = false,
+        RunBackWakeDelayRequired = true,
+        AssetCategory = CurrentTarget.Name,
+        IsCarrying = true,
+        AreaId = CurrentTarget.AreaId
+    }
+    carryPayload.Uid = CurrentTarget.Uid
+    carryPayload.AssetCategory = CurrentTarget.Name
+    carryPayload.AreaId = CurrentTarget.AreaId
+    carryPayload.IsCarrying = true
+
     if typeof(firesignal) == "function" and CarryEvent then
         pcall(function()
-            firesignal(CarryEvent.OnClientEvent, {
-                SpeedMultiplier = 0.95044861554791,
-                Uid = CurrentTarget.Uid,
-                GuardDisabled = false,
-                RunBackWakeDelayRequired = true,
-                AssetCategory = CurrentTarget.Name,
-                IsCarrying = true,
-                AreaId = CurrentTarget.AreaId
-            })
+            firesignal(CarryEvent.OnClientEvent, carryPayload)
         end)
     end
     task.wait(0.2)
 
-    -- 4. Smooth Return to Safe Zone / Base
     SmoothMoveTo(GetSafeZoneCFrame())
 
-    -- 5. Blacklist Collected Egg and Auto-Target Next Rarest Egg
     ClaimedEggs[CurrentTarget.Uid] = true
     EvaluateRarestEgg()
     RefreshUI()
 end
 
--- Automation Loop Switch
 ActionBtn.MouseButton1Click:Connect(function()
     AutoStealEnabled = not AutoStealEnabled
 
@@ -479,6 +514,5 @@ ActionBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Initial Execution Check
 EvaluateRarestEgg()
 RefreshUI()
