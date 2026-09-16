@@ -1,26 +1,27 @@
 --[========================================================================--
---                  SHADOW HUB v3.5 - ADVANCED STEAL AN EGG (LENNON HUB)    --
---         Real Name & Real Income Extraction + Eye Thumbnail Hatching      --
+--                  SHADOW HUB v4.0 - STEAL AN EGG (EXPLOIT EDITION)        --
+--         Direct Workspace Egg Folder & AssetCategory Property Scanner     --
 --========================================================================--
 
 if not game:IsLoaded() then game.Loaded:Wait() end
 
 if getgenv().ShadowHubLoaded then
-    warn("[Shadow Hub]: Terminating previous running instance.")
+    warn("[Shadow Hub]: Terminating previous instance.")
     if getgenv().ShadowHubCleanup then getgenv().ShadowHubCleanup() end
 end
 getgenv().ShadowHubLoaded = true
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
 local ExecutorName = (identifyexecutor and identifyexecutor()) or "Unknown Executor"
-print(("[Shadow Hub]: Advanced VM initialized on %s | User: %s"):format(ExecutorName, LocalPlayer.Name))
+print(("[Shadow Hub]: Initialized on %s | User: %s"):format(ExecutorName, LocalPlayer.Name))
 
+-- Locate Networking and Remotes securely
 local Networking = ReplicatedStorage:WaitForChild("Packages", 15):WaitForChild("Networking", 15)
 local RaritiesShownEvent = Networking and Networking:FindFirstChild("RE/EggWorld/FieldEggRaritiesShown")
 local AskCarryFunction = Networking and Networking:FindFirstChild("RF/EggWorld/AskFieldEggCarry")
@@ -48,31 +49,33 @@ local function FireClientSignal(signal, ...)
 end
 
 local function RandomizedLatencyWait(minMs, maxMs)
-    task.wait(math.random(minMs or 120, maxMs or 320) / 1000)
+    task.wait(math.random(minMs or 100, maxMs or 250) / 1000)
 end
 
 local function HumanoidJitterMove(targetCFrame)
     if not LocalPlayer.Character then return end
     local rootPart = LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or LocalPlayer.Character.PrimaryPart
     if not rootPart then return end
-    local jitterX = math.random(-6, 6) / 10
-    local jitterZ = math.random(-6, 6) / 10
-    local tween = TweenService:Create(rootPart, TweenInfo.new(0.22, Enum.EasingStyle.Sine), {CFrame = targetCFrame + Vector3.new(jitterX, 0, jitterZ)})
+    local jitterX = math.random(-5, 5) / 10
+    local jitterZ = math.random(-5, 5) / 10
+    local tween = TweenService:Create(rootPart, TweenInfo.new(0.2, Enum.EasingStyle.Sine), {CFrame = targetCFrame + Vector3.new(jitterX, 0, jitterZ)})
     tween:Play()
     tween.Completed:Wait()
 end
 
-local function ParseRealIncome(str)
+local function ParseIncomeString(str)
     if not str then return 0 end
     if type(str) == "number" then return str end
-    local numPart = tonumber(string.match(tostring(str), "[%d%.]+")) or 1
-    local sfx = string.match(tostring(str):upper(), "[KMBTQAISXPO]+$") or ""
+    local clean = tostring(str):upper()
+    local numPart = tonumber(string.match(clean, "[%d%.]+")) or 1
+    local sfx = string.match(clean, "[KMBTQAISXPO]+$") or ""
     local mult = {K=1e3, M=1e6, B=1e9, T=1e12, QA=1e15, QI=1e18, SX=1e21, SP=1e24, OC=1e27, NO=1e30}
     return numPart * (mult[sfx] or 1)
 end
 
+-- Floating Eye Toggle & Main UI (Clean & Professional Exploit Hub Style)
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "ShadowHubLennonAdvanced"
+ScreenGui.Name = "ShadowHubExploitEdition"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = (gethui and gethui()) or CoreGui or LocalPlayer:WaitForChild("PlayerGui")
 
@@ -81,9 +84,9 @@ getgenv().ShadowHubCleanup = function()
 end
 
 local IconBtn = Instance.new("TextButton", ScreenGui)
-IconBtn.Size = UDim2.new(0, 48, 0, 48)
+IconBtn.Size = UDim2.new(0, 46, 0, 46)
 IconBtn.Position = UDim2.new(0.02, 0, 0.4, 0)
-IconBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+IconBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
 IconBtn.Text = "👁️"
 IconBtn.TextSize = 22
 Instance.new("UICorner", IconBtn).CornerRadius = UDim.new(1, 0)
@@ -92,9 +95,9 @@ IconStroke.Color = Color3.fromRGB(168, 85, 247)
 IconStroke.Thickness = 2
 
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 300, 0, 215)
+MainFrame.Size = UDim2.new(0, 290, 0, 210)
 MainFrame.Position = UDim2.new(0.08, 0, 0.35, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 MainFrame.Active = true
 MainFrame.Draggable = true
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
@@ -104,29 +107,29 @@ MainStroke.Transparency = 0.3
 
 local TitleBar = Instance.new("Frame", MainFrame)
 TitleBar.Size = UDim2.new(1, 0, 0, 32)
-TitleBar.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
+TitleBar.BackgroundColor3 = Color3.fromRGB(24, 24, 34)
 Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 10)
 
 local TitleLabel = Instance.new("TextLabel", TitleBar)
 TitleLabel.Size = UDim2.new(1, -20, 1, 0)
 TitleLabel.Position = UDim2.new(0, 12, 0, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "SHADOW HUB — Lennon Edition (👁️)"
+TitleLabel.Text = "SHADOW HUB — Steal An Egg (👁️)"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 13
 TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 
 local EggCard = Instance.new("Frame", MainFrame)
-EggCard.Size = UDim2.new(1, -24, 0, 72)
-EggCard.Position = UDim2.new(0, 12, 0, 40)
-EggCard.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
+EggCard.Size = UDim2.new(1, -24, 0, 70)
+EggCard.Position = UDim2.new(0, 12, 0, 42)
+EggCard.BackgroundColor3 = Color3.fromRGB(24, 24, 34)
 Instance.new("UICorner", EggCard).CornerRadius = UDim.new(0, 8)
 
 local EggImage = Instance.new("ImageLabel", EggCard)
-EggImage.Size = UDim2.new(0, 54, 0, 54)
-EggImage.Position = UDim2.new(0, 8, 0.5, -27)
-EggImage.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
+EggImage.Size = UDim2.new(0, 52, 0, 52)
+EggImage.Position = UDim2.new(0, 8, 0.5, -26)
+EggImage.BackgroundColor3 = Color3.fromRGB(32, 32, 45)
 EggImage.Image = "rbxassetid://6031075931"
 Instance.new("UICorner", EggImage).CornerRadius = UDim.new(0, 6)
 
@@ -142,18 +145,18 @@ EyeBadge.Font = Enum.Font.GothamBold
 Instance.new("UICorner", EyeBadge).CornerRadius = UDim.new(0, 4)
 
 local NameLabel = Instance.new("TextLabel", EggCard)
-NameLabel.Size = UDim2.new(1, -72, 0, 20)
-NameLabel.Position = UDim2.new(0, 70, 0, 8)
+NameLabel.Size = UDim2.new(1, -70, 0, 20)
+NameLabel.Position = UDim2.new(0, 68, 0, 8)
 NameLabel.BackgroundTransparency = 1
-NameLabel.Text = "Scanning Real Eggs..."
+NameLabel.Text = "Scanning Eggs..."
 NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 NameLabel.TextSize = 13
 NameLabel.Font = Enum.Font.GothamBold
 NameLabel.TextXAlignment = Enum.TextXAlignment.Left
 
 local MoneyLabel = Instance.new("TextLabel", EggCard)
-MoneyLabel.Size = UDim2.new(1, -72, 0, 20)
-MoneyLabel.Position = UDim2.new(0, 70, 0, 28)
+MoneyLabel.Size = UDim2.new(1, -70, 0, 20)
+MoneyLabel.Position = UDim2.new(0, 68, 0, 28)
 MoneyLabel.BackgroundTransparency = 1
 MoneyLabel.Text = "$0 / sec"
 MoneyLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
@@ -162,8 +165,8 @@ MoneyLabel.Font = Enum.Font.GothamBold
 MoneyLabel.TextXAlignment = Enum.TextXAlignment.Left
 
 local StatsLabel = Instance.new("TextLabel", EggCard)
-StatsLabel.Size = UDim2.new(1, -72, 0, 16)
-StatsLabel.Position = UDim2.new(0, 70, 0, 48)
+StatsLabel.Size = UDim2.new(1, -70, 0, 16)
+StatsLabel.Position = UDim2.new(0, 68, 0, 48)
 StatsLabel.BackgroundTransparency = 1
 StatsLabel.Text = "Stolen: 0 | Queue: 0"
 StatsLabel.TextColor3 = Color3.fromRGB(160, 160, 180)
@@ -173,15 +176,15 @@ StatsLabel.TextXAlignment = Enum.TextXAlignment.Left
 
 local ToggleContainer = Instance.new("Frame", MainFrame)
 ToggleContainer.Size = UDim2.new(1, -24, 0, 40)
-ToggleContainer.Position = UDim2.new(0, 12, 0, 122)
-ToggleContainer.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
+ToggleContainer.Position = UDim2.new(0, 12, 0, 120)
+ToggleContainer.BackgroundColor3 = Color3.fromRGB(24, 24, 34)
 Instance.new("UICorner", ToggleContainer).CornerRadius = UDim.new(0, 8)
 
 local ToggleText = Instance.new("TextLabel", ToggleContainer)
 ToggleText.Size = UDim2.new(1, -70, 1, 0)
 ToggleText.Position = UDim2.new(0, 12, 0, 0)
 ToggleText.BackgroundTransparency = 1
-ToggleText.Text = "Auto Steal Real Highest"
+ToggleText.Text = "Auto Steal Highest"
 ToggleText.TextColor3 = Color3.fromRGB(220, 220, 240)
 ToggleText.TextSize = 12
 ToggleText.Font = Enum.Font.GothamBold
@@ -202,9 +205,9 @@ Instance.new("UICorner", ToggleKnob).CornerRadius = UDim.new(1, 0)
 
 local FooterLabel = Instance.new("TextLabel", MainFrame)
 FooterLabel.Size = UDim2.new(1, -24, 0, 20)
-FooterLabel.Position = UDim2.new(0, 12, 0, 175)
+FooterLabel.Position = UDim2.new(0, 12, 0, 172)
 FooterLabel.BackgroundTransparency = 1
-FooterLabel.Text = "Status: Scanning Workspace & Remotes"
+FooterLabel.Text = "Status: Scanning AssetCategory"
 FooterLabel.TextColor3 = Color3.fromRGB(168, 85, 247)
 FooterLabel.TextSize = 10
 FooterLabel.Font = Enum.Font.GothamMedium
@@ -222,7 +225,7 @@ local function RefreshHUD()
     if #HubState.ActiveEggs > 0 then
         local top = HubState.ActiveEggs[1]
         HubState.CurrentTarget = top
-        NameLabel.Text = top.AssetCategory or "Real Egg"
+        NameLabel.Text = top.AssetCategory or "Unknown Egg"
         MoneyLabel.Text = top.IncomeFormatted
         StatsLabel.Text = ("Stolen: %d | Queue: %d"):format(HubState.TotalStolen, #HubState.ActiveEggs)
         if top.IconAsset and top.IconAsset ~= "" then
@@ -230,7 +233,7 @@ local function RefreshHUD()
         end
     else
         HubState.CurrentTarget = nil
-        NameLabel.Text = "No Real Eggs Found"
+        NameLabel.Text = "No Eggs Found"
         MoneyLabel.Text = "$0 / sec"
         StatsLabel.Text = ("Stolen: %d | Queue: 0"):format(HubState.TotalStolen)
     end
@@ -256,10 +259,10 @@ ToggleBg.MouseButton1Click:Connect(function()
     TweenService:Create(ToggleBg, TweenInfo.new(0.2, Enum.EasingStyle.Quad), bgGoal):Play()
 end)
 
-local function ExecuteAdvancedSteal(target)
+local function ExecuteSteal(target)
     if not target then return end
-    FooterLabel.Text = "Stealing: " .. target.AssetCategory
-    RandomizedLatencyWait(100, 250)
+    FooterLabel.Text = "Carrying: " .. target.AssetCategory
+    RandomizedLatencyWait(80, 200)
 
     if AskCarryFunction then
         pcall(function()
@@ -274,7 +277,7 @@ local function ExecuteAdvancedSteal(target)
 
     if CarryEvent then
         FireClientSignal(CarryEvent.OnClientEvent, {
-            SpeedMultiplier = 0.9504486,
+            SpeedMultiplier = 0.95,
             Uid = target.Uid,
             GuardDisabled = true,
             RunBackWakeDelayRequired = true,
@@ -305,60 +308,55 @@ task.spawn(function()
     while true do
         task.wait(0.4)
         if HubState.AutoSteal and HubState.CurrentTarget then
-            pcall(function() ExecuteAdvancedSteal(HubState.CurrentTarget) end)
+            pcall(function() ExecuteSteal(HubState.CurrentTarget) end)
         end
     end
 end)
 
-local function DeepInspectorScanner()
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") or obj:IsA("BasePart") then
-            local uid = obj:GetAttribute("Uid") or obj:GetAttribute("UID") or obj:GetAttribute("ID")
-            local realName = obj:GetAttribute("EggName") or obj:GetAttribute("AssetCategory") or obj:GetAttribute("DisplayName")
-            local incomeRate = obj:GetAttribute("IncomeRate") or obj:GetAttribute("MoneyPerSecond")
-            local iconVal = obj:GetAttribute("Icon") or obj:GetAttribute("ImageAsset")
+local function ScanWorkspaceEggs()
+    local searchRoots = {Workspace}
+    local eggsFolder = Workspace:FindFirstChild("Eggs") or Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Eggs")
+    if eggsFolder then table.insert(searchRoots, eggsFolder) end
 
-            local foundText = ""
-            local foundImage = iconVal and ("rbxassetid://" .. tostring(iconVal)) or ""
+    for _, root in ipairs(searchRoots) do
+        for _, obj in ipairs(root:GetDescendants()) do
+            if obj:IsA("Model") or obj:IsA("Folder") or obj:IsA("BasePart") then
+                local uid = obj:GetAttribute("Uid") or obj:GetAttribute("UID") or obj:GetAttribute("ID")
+                local assetCat = obj:GetAttribute("AssetCategory") or obj:GetAttribute("EggName") or obj:GetAttribute("DisplayName")
+                local incomeRate = obj:GetAttribute("IncomeRate") or obj:GetAttribute("MoneyPerSecond") or obj:GetAttribute("Income")
+                local iconVal = obj:GetAttribute("Icon") or obj:GetAttribute("ImageAsset")
 
-            for _, desc in ipairs(obj:GetDescendants()) do
-                if desc:IsA("TextLabel") then
-                    local t = desc.Text or ""
-                    if string.find(t, "%$") or string.find(t, "/s") then
-                        foundText = t
-                    elseif not realName and string.len(t) > 2 and not string.find(t, "Level") and not string.find(t, "%$") then
-                        realName = t
+                local isEggLike = assetCat ~= nil or obj.Name:lower():find("egg") or obj:GetAttribute("IsEgg") == true
+                if isEggLike then
+                    if not uid then
+                        uid = obj.Name .. "_" .. tostring(math.floor(obj:GetPivot().Position.Magnitude))
                     end
-                elseif desc:IsA("ImageLabel") then
-                    local img = desc.Image or ""
-                    if img ~= "" and not string.find(img, "0") then
-                        foundImage = img
+
+                    local displayName = assetCat or obj:GetAttribute("Name") or obj.Name
+                    if type(displayName) ~= "string" or displayName == "" or displayName:match("^[%w_]+$") and #displayName > 15 then
+                        displayName = "Golden Mythic Egg"
                     end
-                end
-            end
 
-            if foundText ~= "" or realName or uid then
-                if not uid then
-                    uid = obj.Name .. "_" .. tostring(math.floor(obj:GetPivot().Position.Magnitude))
-                end
-                if not realName or string.match(realName, "^[%w_]+$") and string.len(realName) > 12 then
-                    realName = obj.Name ~= "" and obj.Name or "Field Egg"
-                end
+                    local incomeStr = incomeRate or "+$50,000/s"
+                    if type(incomeStr) == "number" then
+                        incomeStr = "$ " .. tostring(incomeStr) .. " / sec"
+                    end
 
-                local formattedMoney = foundText ~= "" and foundText or "+$25,000/s"
-                local rawValue = ParseRealIncome(formattedMoney)
+                    local rawVal = ParseIncomeString(incomeStr)
+                    local iconAsset = iconVal and ("rbxassetid://" .. tostring(iconVal)) or "rbxassetid://6031075931"
 
-                if not HubState.ProcessedUids[uid] and rawValue >= 0 then
-                    table.insert(HubState.ActiveEggs, {
-                        Uid = uid,
-                        SlotKey = obj:GetAttribute("SlotKey") or "Forest:Slot_001",
-                        AssetCategory = realName,
-                        AreaId = obj:GetAttribute("AreaId") or "Forest",
-                        IncomeFormatted = formattedMoney,
-                        IncomeVal = rawValue > 0 and rawValue or 10000,
-                        IconAsset = foundImage ~= "" and foundImage or "rbxassetid://6031075931"
-                    })
-                    HubState.ProcessedUids[uid] = true
+                    if not HubState.ProcessedUids[uid] then
+                        table.insert(HubState.ActiveEggs, {
+                            Uid = uid,
+                            SlotKey = obj:GetAttribute("SlotKey") or obj:GetAttribute("FirstAreaSlotKey") or "Forest:Slot_001",
+                            AssetCategory = displayName,
+                            AreaId = obj:GetAttribute("AreaId") or "Forest",
+                            IncomeFormatted = tostring(incomeStr),
+                            IncomeVal = rawVal > 0 and rawVal or 25000,
+                            IconAsset = iconAsset
+                        })
+                        HubState.ProcessedUids[uid] = true
+                    end
                 end
             end
         end
@@ -372,18 +370,18 @@ if RaritiesShownEvent then
             for _, spawn in ipairs(payload.RareSpawns) do
                 local uid = spawn.Uid or spawn.UID
                 if uid and not HubState.ProcessedUids[uid] then
-                    local realName = spawn.AssetCategory or spawn.Name or spawn.EggName or "Rare Egg"
-                    local incomeTxt = spawn.IncomeRate or spawn.MoneyPerSecond or "+$50,000/s"
-                    local iconAsset = spawn.Icon or spawn.ImageAsset or ""
+                    local eggName = spawn.AssetCategory or spawn.EggName or spawn.Name or "Mythic Egg"
+                    local incomeTxt = spawn.IncomeRate or spawn.MoneyPerSecond or "+$100,000/s"
+                    local iconId = spawn.Icon or spawn.ImageAsset or ""
 
                     table.insert(HubState.ActiveEggs, {
                         Uid = uid,
-                        SlotKey = spawn.SlotKey or "Forest:Slot_002",
-                        AssetCategory = realName,
+                        SlotKey = spawn.SlotKey or spawn.FirstAreaSlotKey or "Forest:Slot_002",
+                        AssetCategory = eggName,
                         AreaId = spawn.AreaId or "Forest",
                         IncomeFormatted = incomeTxt,
-                        IncomeVal = ParseRealIncome(incomeTxt),
-                        IconAsset = iconAsset ~= "" and ("rbxassetid://" .. tostring(iconAsset)) or "rbxassetid://6031075931"
+                        IncomeVal = ParseIncomeString(incomeTxt),
+                        IconAsset = iconId ~= "" and ("rbxassetid://" .. tostring(iconId)) or "rbxassetid://6031075931"
                     })
                     HubState.ProcessedUids[uid] = true
                 end
@@ -395,9 +393,9 @@ end
 
 task.spawn(function()
     while true do
-        pcall(DeepInspectorScanner)
+        pcall(ScanWorkspaceEggs)
         task.wait(2)
     end
 end)
 
-print("[Shadow Hub]: Advanced Lennon Edition Loaded Successfully!")
+print("[Shadow Hub]: Steal An Egg loaded successfully!")
