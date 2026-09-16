@@ -3,9 +3,10 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
--- Networking Remotes (Steal An Egg!)
+-- Networking Remotes
 local Networking = ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("Networking", 5)
 local RaritiesShownEvent = Networking and Networking:FindFirstChild("RE/EggWorld/FieldEggRaritiesShown")
 local AskCarryFunction = Networking and Networking:FindFirstChild("RF/EggWorld/AskFieldEggCarry")
@@ -17,10 +18,9 @@ local HubState = {
     ProcessedUids = {},
     BaseCFrame = nil,
     CurrentTarget = nil,
-    AutoSteal = false -- Controls the toggle state
+    AutoSteal = false
 }
 
--- Cross-Executor Signal Helper
 local function FireClientSignal(signal, ...)
     if typeof(firesignal) == "function" then
         firesignal(signal, ...)
@@ -33,55 +33,70 @@ local function FireClientSignal(signal, ...)
     end
 end
 
--- Helper to convert formatted strings (e.g., "+1.5M/s") into numbers
-local function ParseIncomeString(val)
-    if type(val) == "number" then return val end
-    if not val then return 0 end
-    
-    local cleanStr = tostring(val):upper():gsub("[+%s$/A-Z]", "")
-    local rawStr = tostring(val):upper()
-    local multiplier = 1
-    
-    if string.find(rawStr, "K") then multiplier = 1e3
-    elseif string.find(rawStr, "M") then multiplier = 1e6
-    elseif string.find(rawStr, "B") then multiplier = 1e9
-    elseif string.find(rawStr, "T") then multiplier = 1e12
+--------------------------------------------------------------------------------
+-- PREMIUM BYPASS: DEEP DATA EXTRACTION (NO STRING PARSING)
+--------------------------------------------------------------------------------
+local function GetTrueEggValue(eggModel)
+    -- 1. Direct Attribute Read (Fastest, most accurate)
+    local attributes = {"RawIncome", "Income", "CoinValue", "BaseValue", "Money"}
+    for _, attr in ipairs(attributes) do
+        local val = eggModel:GetAttribute(attr)
+        if type(val) == "number" then return val end
     end
-    
-    local num = tonumber(cleanStr) or 0
-    return num * multiplier
+
+    -- 2. Internal Value Object Read
+    for _, obj in ipairs(eggModel:GetDescendants()) do
+        if (obj:IsA("NumberValue") or obj:IsA("IntValue")) and table.find(attributes, obj.Name) then
+            return obj.Value
+        end
+    end
+
+    -- 3. Rarity Override (If numbers are completely hidden server-side)
+    local rarity = eggModel:GetAttribute("Rarity")
+    if rarity == "Eternal" then return 9e35
+    elseif rarity == "Divine" then return 9e34
+    elseif rarity == "Secret" then return 9e33
+    end
+
+    -- 4. Pure Number Extraction from any text (Fallback, strips all letters)
+    for _, desc in ipairs(eggModel:GetDescendants()) do
+        if desc:IsA("TextLabel") and string.find(desc.Text, "%$") then
+            -- Extracts only the raw digits, ignoring everything else
+            local pureNumber = string.match(desc.Text, "%d+%.?%d*")
+            if pureNumber then
+                return tonumber(pureNumber) or 0
+            end
+        end
+    end
+
+    return 0
 end
 
 --------------------------------------------------------------------------------
--- CUSTOM COMPACT GUI (Title Added & Draggable)
+-- CUSTOM COMPACT GUI
 --------------------------------------------------------------------------------
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "ShadowHubCustomUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = (gethui and gethui()) or CoreGui or LocalPlayer:WaitForChild("PlayerGui")
 
--- Floating Toggle Icon
 local IconBtn = Instance.new("TextButton", ScreenGui)
-IconBtn.Name = "HubIcon"
 IconBtn.Size = UDim2.new(0, 45, 0, 45)
 IconBtn.Position = UDim2.new(0.02, 0, 0.45, 0)
-IconBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-IconBtn.Text = "🥚"
+IconBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+IconBtn.Text = "⚡"
 IconBtn.TextSize = 22
 Instance.new("UICorner", IconBtn).CornerRadius = UDim.new(1, 0)
-local IconStroke = Instance.new("UIStroke", IconBtn)
-IconStroke.Color = Color3.fromRGB(0, 255, 128)
-IconStroke.Thickness = 2
+Instance.new("UIStroke", IconBtn).Color = Color3.fromRGB(138, 43, 226)
+Instance.new("UIStroke", IconBtn).Thickness = 2
 
--- Main Card Frame (Slightly taller for title)
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Name = "MainCard"
 MainFrame.Size = UDim2.new(0, 240, 0, 155)
 MainFrame.Position = UDim2.new(0.1, 0, 0.4, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+MainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 15)
 MainFrame.Active = true
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
-Instance.new("UIStroke", MainFrame).Color = Color3.fromRGB(40, 40, 50)
+Instance.new("UIStroke", MainFrame).Color = Color3.fromRGB(138, 43, 226)
 
 -- Dragging Logic
 local dragging, dragInput, dragStart, startPos
@@ -107,31 +122,29 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Top Title
 local TitleLabel = Instance.new("TextLabel", MainFrame)
 TitleLabel.Size = UDim2.new(1, 0, 0, 20)
 TitleLabel.Position = UDim2.new(0, 0, 0, 5)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "SHADOW HUB"
-TitleLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
+TitleLabel.Text = "SHADOW HUB PRO"
+TitleLabel.TextColor3 = Color3.fromRGB(138, 43, 226)
 TitleLabel.TextSize = 14
 TitleLabel.Font = Enum.Font.GothamBold
 
--- UI Elements inside MainFrame (Shifted down)
 local EggImage = Instance.new("ImageLabel", MainFrame)
 EggImage.Size = UDim2.new(0, 45, 0, 45)
 EggImage.Position = UDim2.new(0, 10, 0, 30)
-EggImage.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+EggImage.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 EggImage.Image = "rbxassetid://0"
 Instance.new("UICorner", EggImage).CornerRadius = UDim.new(0, 6)
 
 local MoneyLabel = Instance.new("TextLabel", MainFrame)
 MoneyLabel.Size = UDim2.new(0, 165, 0, 25)
 MoneyLabel.Position = UDim2.new(0, 65, 0, 30)
-MoneyLabel.BackgroundColor3 = Color3.fromRGB(25, 35, 25)
-MoneyLabel.Text = "+$0 / sec"
-MoneyLabel.TextColor3 = Color3.fromRGB(0, 255, 128)
-MoneyLabel.TextSize = 15
+MoneyLabel.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
+MoneyLabel.Text = "Scanning Engine..."
+MoneyLabel.TextColor3 = Color3.fromRGB(180, 100, 255)
+MoneyLabel.TextSize = 14
 MoneyLabel.Font = Enum.Font.SourceSansBold
 Instance.new("UICorner", MoneyLabel).CornerRadius = UDim.new(0, 4)
 
@@ -139,7 +152,7 @@ local NameLabel = Instance.new("TextLabel", MainFrame)
 NameLabel.Size = UDim2.new(0, 165, 0, 20)
 NameLabel.Position = UDim2.new(0, 65, 0, 58)
 NameLabel.BackgroundTransparency = 1
-NameLabel.Text = "Scanning Server..."
+NameLabel.Text = "Waiting for data..."
 NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 NameLabel.TextSize = 13
 NameLabel.Font = Enum.Font.SourceSansBold
@@ -149,31 +162,30 @@ local RarityLabel = Instance.new("TextLabel", MainFrame)
 RarityLabel.Size = UDim2.new(0, 65, 0, 15)
 RarityLabel.Position = UDim2.new(0, 10, 0, 80)
 RarityLabel.BackgroundTransparency = 1
-RarityLabel.Text = "Rarity: None"
-RarityLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+RarityLabel.Text = "Rank: N/A"
+RarityLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
 RarityLabel.TextSize = 10
 RarityLabel.Font = Enum.Font.SourceSansBold
 
 local StealBtn = Instance.new("TextButton", MainFrame)
 StealBtn.Size = UDim2.new(0, 220, 0, 35)
 StealBtn.Position = UDim2.new(0, 10, 0, 110)
-StealBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+StealBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 StealBtn.Text = "AUTO GET: OFF"
-StealBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+StealBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 StealBtn.TextSize = 14
 StealBtn.Font = Enum.Font.SourceSansBold
 Instance.new("UICorner", StealBtn).CornerRadius = UDim.new(0, 6)
 
--- Toggle Visibility of the Main Menu
 IconBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
 end)
 
 --------------------------------------------------------------------------------
--- CARD UPDATE & SORTING LOGIC
+-- RAPID SORTING LOGIC
 --------------------------------------------------------------------------------
 local function RefreshHUD()
-    -- Sort active eggs STRICTLY by highest money per second
+    -- Absolute numeric sort (highest raw mathematical value first)
     table.sort(HubState.ActiveEggs, function(a, b)
         return (a.IncomeVal or 0) > (b.IncomeVal or 0)
     end)
@@ -182,35 +194,36 @@ local function RefreshHUD()
         local top = HubState.ActiveEggs[1]
         HubState.CurrentTarget = top
         
-        NameLabel.Text = top.AssetCategory or "Unknown Egg"
-        RarityLabel.Text = "Rarity: " .. (top.Rarity or "Found")
-        MoneyLabel.Text = top.IncomeFormatted or "+$0/s"
+        NameLabel.Text = top.AssetCategory or "Target Acquired"
+        RarityLabel.Text = "Rank: 1"
+        MoneyLabel.Text = "Value: " .. tostring(top.IncomeVal)
         EggImage.Image = top.IconAsset or "rbxassetid://6031075931"
     else
         HubState.CurrentTarget = nil
-        NameLabel.Text = "No Eggs Available"
-        RarityLabel.Text = "Rarity: N/A"
-        MoneyLabel.Text = "$0 / sec"
+        NameLabel.Text = "Searching Server..."
+        MoneyLabel.Text = "No Target"
         EggImage.Image = "rbxassetid://0"
     end
 end
 
 --------------------------------------------------------------------------------
--- CORE STEAL LOGIC & AUTO LOOP
+-- HIGH-SPEED CORE STEAL LOGIC
 --------------------------------------------------------------------------------
 local function StealCurrentTarget()
     if not HubState.CurrentTarget then return end
     local target = HubState.CurrentTarget
 
-    -- Server Steal Invocation
+    -- INSTANT Server Steal Call
     if AskCarryFunction then
-        pcall(function() AskCarryFunction:InvokeServer({FirstAreaSlotKey = target.SlotKey, Uid = target.Uid}) end)
+        task.spawn(function()
+            pcall(function() AskCarryFunction:InvokeServer({FirstAreaSlotKey = target.SlotKey, Uid = target.Uid}) end)
+        end)
     end
 
-    -- Visual & Bypass Carry Event
+    -- INSTANT Client Visual Bypass
     if CarryEvent then
         FireClientSignal(CarryEvent.OnClientEvent, {
-            SpeedMultiplier = 0.95,
+            SpeedMultiplier = 1,
             Uid = target.Uid,
             GuardDisabled = true,
             RunBackWakeDelayRequired = false,
@@ -220,7 +233,7 @@ local function StealCurrentTarget()
         })
     end
 
-    -- Remove stolen egg from queue
+    -- Remove from queue immediately to cycle to the next one
     for i, egg in ipairs(HubState.ActiveEggs) do
         if egg.Uid == target.Uid then
             table.remove(HubState.ActiveEggs, i)
@@ -228,36 +241,35 @@ local function StealCurrentTarget()
         end
     end
 
-    -- Teleport back to safe zone immediately
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and HubState.BaseCFrame then
-        task.wait(0.2)
-        LocalPlayer.Character.HumanoidRootPart.CFrame = HubState.BaseCFrame
+    -- Pivot teleport (safer and faster than CFrame)
+    if LocalPlayer.Character and HubState.BaseCFrame then
+        LocalPlayer.Character:PivotTo(HubState.BaseCFrame)
     end
 
     RefreshHUD()
 end
 
--- Toggle Button Click Event
 StealBtn.MouseButton1Click:Connect(function()
     HubState.AutoSteal = not HubState.AutoSteal
     
     if HubState.AutoSteal then
-        StealBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50) -- Turns Red
-        StealBtn.Text = "AUTO GET: ON"
+        StealBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+        StealBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        StealBtn.Text = "AUTO GET: ACTIVE"
         
-        -- Lock in your Base Position the moment you turn it on
-        if not HubState.BaseCFrame and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            HubState.BaseCFrame = LocalPlayer.Character.HumanoidRootPart.CFrame
+        if not HubState.BaseCFrame and LocalPlayer.Character and LocalPlayer.Character.PrimaryPart then
+            HubState.BaseCFrame = LocalPlayer.Character.PrimaryPart.CFrame
         end
     else
-        StealBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100) -- Turns Green
+        StealBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+        StealBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
         StealBtn.Text = "AUTO GET: OFF"
     end
 end)
 
--- The Auto-Steal Loop
+-- Overclocked Loop (Extremely fast, no 0.5s delays)
 task.spawn(function()
-    while task.wait(0.5) do
+    while task.wait(0.1) do
         if HubState.AutoSteal and HubState.CurrentTarget then
             StealCurrentTarget()
         end
@@ -265,30 +277,32 @@ task.spawn(function()
 end)
 
 --------------------------------------------------------------------------------
--- WORKSPACE SCANNER & SERVER BROADCAST DETECTOR
+-- DEEP MAP SCANNER
 --------------------------------------------------------------------------------
 local function ScanServerForEggs()
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BillboardGui") then
-            local textLabel = obj:FindFirstChildOfClass("TextLabel")
-            if textLabel and (string.find(textLabel.Text, "/s") or string.find(textLabel.Text, "/sec")) then
-                local model = obj.Parent
-                if model and model:IsA("Model") then
-                    local uid = model:GetAttribute("Uid") or model:GetAttribute("UID")
-                    local slotKey = model:GetAttribute("SlotKey") or model:GetAttribute("FirstAreaSlotKey") or ""
-                    
-                    if not uid and model:FindFirstChild("Uid") then uid = model.Uid.Value end
-                    if slotKey == "" and model:FindFirstChild("SlotKey") then slotKey = model.SlotKey.Value end
-                    if not uid then uid = model.Name end 
-                    
-                    if uid and not HubState.ProcessedUids[uid] then
-                        local rawMoney = ParseIncomeString(textLabel.Text)
-                        table.insert(HubState.ActiveEggs, {
-                            Uid = uid, SlotKey = slotKey, AssetCategory = model.Name, AreaId = "Map",
-                            Rarity = "Discovered", IncomeFormatted = textLabel.Text, IncomeVal = rawMoney, IconAsset = "rbxassetid://6031075931"
-                        })
-                        HubState.ProcessedUids[uid] = true
-                    end
+        if obj:IsA("Model") then
+            local uid = obj:GetAttribute("Uid") or obj:GetAttribute("UID")
+            local slotKey = obj:GetAttribute("SlotKey") or obj:GetAttribute("FirstAreaSlotKey")
+            
+            if not uid and obj:FindFirstChild("Uid") then uid = obj.Uid.Value end
+            if not slotKey and obj:FindFirstChild("SlotKey") then slotKey = obj.SlotKey.Value end
+            
+            if uid and slotKey and not HubState.ProcessedUids[uid] then
+                
+                -- Route through the new Deep Data extractor
+                local rawMoney = GetTrueEggValue(obj)
+                
+                if rawMoney > 0 then
+                    table.insert(HubState.ActiveEggs, {
+                        Uid = uid,
+                        SlotKey = slotKey,
+                        AssetCategory = obj.Name,
+                        AreaId = "Map",
+                        IncomeVal = rawMoney,
+                        IconAsset = "rbxassetid://6031075931"
+                    })
+                    HubState.ProcessedUids[uid] = true
                 end
             end
         end
@@ -296,26 +310,38 @@ local function ScanServerForEggs()
     RefreshHUD()
 end
 
--- Run scanner continuously
 task.spawn(function()
-    while task.wait(3) do
+    while task.wait(2) do
         ScanServerForEggs()
     end
 end)
 
--- Listen for instant spawns
+--------------------------------------------------------------------------------
+-- NETWORK INTERCEPTOR (Instant spawn detection)
+--------------------------------------------------------------------------------
 if RaritiesShownEvent then
     RaritiesShownEvent.OnClientEvent:Connect(function(payload)
         if payload and payload.RareSpawns then
             for _, spawn in ipairs(payload.RareSpawns) do
                 local uid = spawn.Uid or spawn.UID
                 if uid and not HubState.ProcessedUids[uid] then
-                    local rawMoney = spawn.RawIncome or ParseIncomeString(spawn.IncomeRate)
+                    
+                    -- Prioritize real network integers over everything
+                    local rawMoney = spawn.RawIncome or spawn.Income or 0
+                    
+                    if rawMoney == 0 then
+                        if spawn.Rarity == "Eternal" then rawMoney = 9e35
+                        elseif spawn.Rarity == "Divine" then rawMoney = 9e34
+                        elseif spawn.Rarity == "Secret" then rawMoney = 9e33 end
+                    end
+                    
                     table.insert(HubState.ActiveEggs, {
-                        Uid = uid, SlotKey = spawn.SlotKey or spawn.FirstAreaSlotKey or "",
-                        AssetCategory = spawn.AssetCategory or spawn.Name or "Rare Egg", AreaId = spawn.AreaId or spawn.Area or "Unknown",
-                        Rarity = spawn.Rarity or "Secret", IncomeFormatted = spawn.IncomeRate or ("+$" .. tostring(rawMoney) .. "/s"),
-                        IncomeVal = rawMoney, IconAsset = spawn.Icon or spawn.ImageAsset or "rbxassetid://6031075931"
+                        Uid = uid, 
+                        SlotKey = spawn.SlotKey or spawn.FirstAreaSlotKey or "",
+                        AssetCategory = spawn.AssetCategory or spawn.Name or "Target", 
+                        AreaId = spawn.AreaId or spawn.Area or "Unknown",
+                        IncomeVal = rawMoney, 
+                        IconAsset = spawn.Icon or spawn.ImageAsset or "rbxassetid://6031075931"
                     })
                     HubState.ProcessedUids[uid] = true
                 end
