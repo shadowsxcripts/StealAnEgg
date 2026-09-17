@@ -1,6 +1,6 @@
 --[========================================================================--
---          SHADOW HUB v7.0 - STEAL AN EGG (FINAL EXPLOIT SCRIPT)           --
---    Rarest Egg Detector, Forest Boss Hit, Boss Ride & Queue Rotation      --
+--          SHADOW HUB v7.1 - STEAL AN EGG (FIXED SERVER SCANNER)         --
+--    RaritiesShownEvent Hook, Workspace Egg Folder & Attribute Scanner     --
 --========================================================================--
 
 if not game:IsLoaded() then game.Loaded:Wait() end
@@ -20,6 +20,7 @@ local LocalPlayer = Players.LocalPlayer
 
 -- Secure Remote Event & Function Locators
 local Networking = ReplicatedStorage:WaitForChild("Packages", 15):WaitForChild("Networking", 15)
+local RaritiesShownEvent = Networking and Networking:FindFirstChild("RE/EggWorld/FieldEggRaritiesShown")
 local AskCarryFunction = Networking and Networking:FindFirstChild("RF/EggWorld/AskFieldEggCarry")
 local CarryEvent = Networking and Networking:FindFirstChild("RE/EggWorld/FieldEggCarry")
 
@@ -65,12 +66,6 @@ local MainStroke = Instance.new("UIStroke", MainFrame)
 MainStroke.Color = Color3.fromRGB(168, 85, 247)
 MainStroke.Transparency = 0.3
 
--- Layout corresponding to User Sketch:
--- Top-Left: Egg hatched photo + rarity
--- Top-Right: Money per seconds
--- Bottom: Egg Name
--- Bottom Toggle Button: Get the egg
-
 local PhotoBox = Instance.new("Frame", MainFrame)
 PhotoBox.Size = UDim2.new(0, 90, 0, 90)
 PhotoBox.Position = UDim2.new(0, 12, 0, 12)
@@ -97,7 +92,7 @@ local MoneyLabel = Instance.new("TextLabel", MainFrame)
 MoneyLabel.Size = UDim2.new(0, 190, 0, 40)
 MoneyLabel.Position = UDim2.new(0, 112, 0, 12)
 MoneyLabel.BackgroundTransparency = 1
-MoneyLabel.Text = "+$100,000,000/s"
+MoneyLabel.Text = "$0 / sec"
 MoneyLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
 MoneyLabel.TextSize = 14
 MoneyLabel.Font = Enum.Font.GothamBold
@@ -107,7 +102,7 @@ local NameLabel = Instance.new("TextLabel", MainFrame)
 NameLabel.Size = UDim2.new(0, 190, 0, 36)
 NameLabel.Position = UDim2.new(0, 112, 0, 60)
 NameLabel.BackgroundTransparency = 1
-NameLabel.Text = "Celestial Cosmic Egg"
+NameLabel.Text = "Scanning Server..."
 NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 NameLabel.TextSize = 12
 NameLabel.Font = Enum.Font.GothamBold
@@ -128,6 +123,36 @@ Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(0, 8)
 IconBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
 end)
+
+-- Parse income string to number for sorting rarest/best
+local function ParseIncome(str)
+    if not str then return 0 end
+    if type(str) == "number" then return str end
+    local clean = tostring(str):upper()
+    local numPart = tonumber(string.match(clean, "[%d%.]+")) or 1
+    local sfx = string.match(clean, "[KMBTQAISXPO]+$") or ""
+    local mult = {K=1e3, M=1e6, B=1e9, T=1e12, QA=1e15, QI=1e18, SX=1e21, SP=1e24, OC=1e27, NO=1e30}
+    return numPart * (mult[sfx] or 1)
+end
+
+-- Update HUD UI
+local function RefreshHUD()
+    table.sort(HubState.ActiveEggs, function(a, b)
+        return (a.IncomeVal or 0) > (b.IncomeVal or 0)
+    end)
+
+    if #HubState.ActiveEggs > 0 then
+        HubState.CurrentTarget = HubState.ActiveEggs[1]
+        NameLabel.Text = HubState.CurrentTarget.AssetCategory
+        MoneyLabel.Text = HubState.CurrentTarget.IncomeFormatted
+        RarityBadge.Text = HubState.CurrentTarget.Rarity or "MYTHIC"
+    else
+        HubState.CurrentTarget = nil
+        NameLabel.Text = "No Eggs Found"
+        MoneyLabel.Text = "$0 / sec"
+        RarityBadge.Text = "NONE"
+    end
+end
 
 -- Core Workflow: Forest -> Boss Hit -> Rarest Area -> Collect -> Boss Ride -> Safe Zone -> Queue Rotation
 local function ExecuteWorkflow(target)
@@ -155,7 +180,7 @@ local function ExecuteWorkflow(target)
     if AskCarryFunction then
         pcall(function()
             AskCarryFunction:InvokeServer({
-                FirstAreaSlotKey = target.SlotKey or "Cosmic:Slot_001",
+                FirstAreaSlotKey = target.SlotKey or "Forest:Slot_001",
                 Uid = target.Uid
             })
         end)
@@ -165,7 +190,6 @@ local function ExecuteWorkflow(target)
     print("[Shadow Hub]: Boss chasing! Staying on top of boss until Safe Zone...")
     task.wait(1)
     
-    -- Simulate riding on top of boss towards safe zone
     local boss = Workspace:FindFirstChild("Boss") or Workspace:FindFirstChild("ForestBoss")
     if boss and boss.PrimaryPart then
         root.CFrame = boss.PrimaryPart.CFrame + Vector3.new(0, 8, 0)
@@ -185,7 +209,8 @@ local function ExecuteWorkflow(target)
         end
     end
 
-    print("[Shadow Hub]: Queue rotated. Switched to next rarest egg.")
+    RefreshHUD()
+    print("[Shadow Hub]: Queue rotated. Switched to next rarest egg in server.")
 end
 
 ToggleBtn.MouseButton1Click:Connect(function()
@@ -205,53 +230,79 @@ ToggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Rarest Egg Server Scanner & Automatic Queue Rotation
+-- FIXED SERVER SCANNER: Hook into RaritiesShownEvent + Deep Workspace Scan + Folder Descendants
+if RaritiesShownEvent then
+    RaritiesShownEvent.OnClientEvent:Connect(function(payload)
+        if payload and (payload.RareSpawns or payload.Eggs) then
+            local spawns = payload.RareSpawns or payload.Eggs
+            for _, spawn in ipairs(spawns) do
+                local uid = spawn.Uid or spawn.UID
+                if uid and not HubState.ProcessedUids[uid] then
+                    local name = spawn.AssetCategory or spawn.EggName or spawn.Name or "Mythic Egg"
+                    local income = spawn.IncomeRate or spawn.MoneyPerSecond or "+$100,000,000/s"
+                    local rarity = spawn.Rarity or "MYTHIC"
+                    
+                    table.insert(HubState.ActiveEggs, {
+                        Uid = uid,
+                        SlotKey = spawn.SlotKey or spawn.FirstAreaSlotKey or "Forest:Slot_001",
+                        AssetCategory = name,
+                        IncomeFormatted = tostring(income),
+                        IncomeVal = ParseIncome(income),
+                        AreaId = spawn.AreaId or "Forest",
+                        Rarity = rarity
+                    })
+                    HubState.ProcessedUids[uid] = true
+                end
+            end
+            RefreshHUD()
+        end
+    end)
+end
+
+-- Deep Workspace Folder & Attribute Scanner for all active server eggs
 local function ScanServerEggs()
     local searchRoots = {Workspace}
+    local eggsFolder = Workspace:FindFirstChild("Eggs") or Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Eggs")
+    if eggsFolder then table.insert(searchRoots, eggsFolder) end
+
     for _, root in ipairs(searchRoots) do
         for _, obj in ipairs(root:GetDescendants()) do
-            if obj:IsA("Model") or obj:IsA("Folder") then
-                local uid = obj:GetAttribute("Uid") or obj:GetAttribute("UID")
-                local assetCat = obj:GetAttribute("AssetCategory") or obj:GetAttribute("EggName")
-                local incomeRate = obj:GetAttribute("IncomeRate") or obj:GetAttribute("MoneyPerSecond")
-                
-                if assetCat and not HubState.ProcessedUids[uid or obj.Name] then
-                    local realUid = uid or (obj.Name .. "_" .. math.floor(obj:GetPivot().Position.Magnitude))
-                    table.insert(HubState.ActiveEggs, {
-                        Uid = realUid,
-                        SlotKey = obj:GetAttribute("SlotKey") or "Cosmic:Slot_001",
-                        AssetCategory = assetCat,
-                        IncomeFormatted = tostring(incomeRate or "+$100,000,000/s"),
-                        IncomeVal = tonumber(incomeRate) or 100000000,
-                        AreaId = obj:GetAttribute("AreaId") or "Cosmic"
-                    })
-                    HubState.ProcessedUids[realUid] = true
+            if obj:IsA("Model") or obj:IsA("Folder") or obj:IsA("BasePart") then
+                local uid = obj:GetAttribute("Uid") or obj:GetAttribute("UID") or obj:GetAttribute("ID")
+                local assetCat = obj:GetAttribute("AssetCategory") or obj:GetAttribute("EggName") or obj:GetAttribute("DisplayName")
+                local incomeRate = obj:GetAttribute("IncomeRate") or obj:GetAttribute("MoneyPerSecond") or obj:GetAttribute("Income")
+                local rarityAttr = obj:GetAttribute("Rarity") or "MYTHIC"
+
+                local isEgg = assetCat ~= nil or obj.Name:lower():find("egg") or obj:GetAttribute("IsEgg") == true
+                if isEgg then
+                    local realUid = uid or (obj.Name .. "_" .. tostring(math.floor(obj:GetPivot().Position.Magnitude)))
+                    if not HubState.ProcessedUids[realUid] then
+                        local name = assetCat or obj.Name
+                        local income = incomeRate or "+$50,000,000/s"
+                        
+                        table.insert(HubState.ActiveEggs, {
+                            Uid = realUid,
+                            SlotKey = obj:GetAttribute("SlotKey") or "Forest:Slot_001",
+                            AssetCategory = name,
+                            IncomeFormatted = tostring(income),
+                            IncomeVal = ParseIncome(income),
+                            AreaId = obj:GetAttribute("AreaId") or "Forest",
+                            Rarity = tostring(rarityAttr)
+                        })
+                        HubState.ProcessedUids[realUid] = true
+                    end
                 end
             end
         end
     end
-
-    -- Sort by highest money per second (Rarest/Best first)
-    table.sort(HubState.ActiveEggs, function(a, b)
-        return (a.IncomeVal or 0) > (b.IncomeVal or 0)
-    end)
-
-    if #HubState.ActiveEggs > 0 then
-        HubState.CurrentTarget = HubState.ActiveEggs[1]
-        NameLabel.Text = HubState.CurrentTarget.AssetCategory
-        MoneyLabel.Text = HubState.CurrentTarget.IncomeFormatted
-    else
-        HubState.CurrentTarget = nil
-        NameLabel.Text = "Scanning Server..."
-        MoneyLabel.Text = "$0 / sec"
-    end
+    RefreshHUD()
 end
 
 task.spawn(function()
     while true do
         pcall(ScanServerEggs)
-        task.wait(2)
+        task.wait(1.5)
     end
 end)
 
-print("[Shadow Hub v7.0]: Steal An Egg script loaded successfully!")
+print("[Shadow Hub v7.1]: Fixed Server Egg Scanner loaded successfully!")
