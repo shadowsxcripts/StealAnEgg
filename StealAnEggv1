@@ -1,12 +1,12 @@
 --[========================================================================--
---     SHADOW HUB v18.0 - DIAGNOSTIC CONSOLE & ATTRIBUTE EMITTER          --
--- Emits raw attributes (Color, Material, Transparency, Uid) for verification --
+--     SHADOW HUB v19.0 - ULTRA-ROBUST EXECUTOR ENGINE & DIAGNOSTICS      --
+--   Deep Recursive Remote Finder, Safe Pcall Wrappers, & In-Game Logs      --
 --========================================================================--
 
 if not game:IsLoaded() then game.Loaded:Wait() end
 
 if getgenv().ShadowHubLoaded then
-    warn("[Shadow Hub v18.0]: Terminating previous instance.")
+    warn("[Shadow Hub v19.0]: Terminating previous instance.")
     if getgenv().ShadowHubCleanup then pcall(getgenv().ShadowHubCleanup) end
 end
 getgenv().ShadowHubLoaded = true
@@ -17,10 +17,32 @@ local Workspace = game:GetService("Workspace")
 local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 
-local Networking = ReplicatedStorage:FindFirstChild("Packages", true) and ReplicatedStorage.Packages:FindFirstChild("Networking", true) 
-    or ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("Networking", 5)
+local function Log(msg)
+    print("[Shadow Hub v19.0]: " .. tostring(msg))
+end
 
-local AskCarryFunction = Networking and Networking:FindFirstChild("RF/EggWorld/AskFieldEggCarry")
+Log("Initializing Ultra-Robust Engine...")
+
+-- -------------------------------------------------------------------------
+-- DEEP RECURSIVE REMOTE FINDER (Zero-Dependency Fallback)
+-- -------------------------------------------------------------------------
+local function FindRemote(className, targetName)
+    local found = nil
+    pcall(function()
+        for _, descendant in ipairs(ReplicatedStorage:GetDescendants()) do
+            if descendant:IsA(className) and (descendant.Name == targetName or descendant.Name:find(targetName)) then
+                found = descendant
+                break
+            end
+        end
+    end)
+    return found
+end
+
+local AskCarryFunction = FindRemote("RemoteFunction", "AskFieldEggCarry") or FindRemote("RemoteFunction", "Carry")
+local RaritiesEvent = FindRemote("RemoteEvent", "FieldEggRaritiesShown") or FindRemote("RemoteEvent", "Rarities")
+
+Log("RemoteFunction AskFieldEggCarry: " .. tostring(AskCarryFunction))
 
 local SlotKeyRegistry = {
     ["Forest"] = {
@@ -32,6 +54,11 @@ local SlotKeyRegistry = {
         ValidSlots = {"Desert:Slot_01", "Desert:Slot_02", "Desert:Slot_03"},
         CenterCFrame = CFrame.new(1200, 10, 0),
         SafeZoneCFrame = CFrame.new(1700, 20, 500)
+    },
+    ["Volcano"] = {
+        ValidSlots = {"Volcano:Slot_01", "Volcano:Slot_02"},
+        CenterCFrame = CFrame.new(2400, 10, 0),
+        SafeZoneCFrame = CFrame.new(2900, 20, 500)
     }
 }
 
@@ -45,7 +72,7 @@ local HubState = {
 }
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "ShadowHubDiagnosticEdition"
+ScreenGui.Name = "ShadowHubRobustEdition"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = (gethui and gethui()) or CoreGui or LocalPlayer:WaitForChild("PlayerGui")
 
@@ -105,7 +132,7 @@ local NameLabel = Instance.new("TextLabel", MainFrame)
 NameLabel.Size = UDim2.new(0, 190, 0, 36)
 NameLabel.Position = UDim2.new(0, 112, 0, 60)
 NameLabel.BackgroundTransparency = 1
-NameLabel.Text = "Diagnostics Active..."
+NameLabel.Text = "Engine Ready..."
 NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 NameLabel.TextSize = 12
 NameLabel.Font = Enum.Font.GothamBold
@@ -126,6 +153,7 @@ IconBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
 end)
 
+-- GodMode with safe pcall
 local function EnableGodMode()
     task.spawn(function()
         while HubState.GodModeActive do
@@ -136,7 +164,7 @@ local function EnableGodMode()
                     if humanoid then humanoid.Health = humanoid.MaxHealth end
                 end
             end)
-            task.wait(0.1)
+            task.wait(0.2)
         end
     end)
 end
@@ -170,8 +198,94 @@ local function RefreshHUD()
     end
 end
 
--- Diagnostic Scanner with Attribute Logging
-local function DiagnosticScanner()
+-- Ultra-Safe Workflow Execution with Pcall
+local function ExecuteWorkflow(target)
+    if not target then return end
+    Log("Executing workflow for target: " .. tostring(target.AssetCategory))
+
+    local areaData = SlotKeyRegistry[target.AreaId] or SlotKeyRegistry["Forest"]
+    local verifiedSlotKey = areaData.ValidSlots[1]
+    for _, slot in ipairs(areaData.ValidSlots) do
+        if slot == target.SlotKey then
+            verifiedSlotKey = slot
+            break
+        end
+    end
+
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then 
+        Log("Error: Character RootPart not found!")
+        return 
+    end
+    local root = char.HumanoidRootPart
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+
+    if humanoid then humanoid.Health = humanoid.MaxHealth end
+
+    pcall(function()
+        root.CFrame = areaData.CenterCFrame + Vector3.new(0, 15, 0)
+    end)
+    task.wait(0.4)
+
+    pcall(function()
+        if target.InstanceRef and target.InstanceRef.PrimaryPart then
+            root.CFrame = target.InstanceRef.PrimaryPart.CFrame + Vector3.new(0, 4, 0)
+        else
+            root.CFrame = areaData.CenterCFrame + Vector3.new(10, 10, 10)
+        end
+    end)
+    task.wait(0.3)
+
+    if AskCarryFunction then
+        local success, err = pcall(function()
+            AskCarryFunction:InvokeServer({
+                FirstAreaSlotKey = verifiedSlotKey,
+                Uid = target.Uid
+            })
+        end)
+        if success then
+            Log("Successfully invoked AskFieldEggCarry!")
+        else
+            Log("InvokeServer failed: " .. tostring(err))
+        end
+    else
+        Log("Warning: AskCarryFunction is nil. Skipping remote invoke.")
+    end
+
+    task.wait(0.6)
+    pcall(function()
+        root.CFrame = areaData.SafeZoneCFrame
+    end)
+
+    for i, egg in ipairs(HubState.ActiveEggs) do
+        if egg.Uid == target.Uid then
+            table.remove(HubState.ActiveEggs, i)
+            break
+        end
+    end
+
+    RefreshHUD()
+end
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    HubState.AutoSteal = not HubState.AutoSteal
+    if HubState.AutoSteal then
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
+        ToggleBtn.Text = "TOGGLE: AUTO GET RAREST EGG [ON]"
+        task.spawn(function()
+            while HubState.AutoSteal and HubState.CurrentTarget do
+                ExecuteWorkflow(HubState.CurrentTarget)
+                task.wait(1.5)
+            end
+        end)
+    else
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(126, 34, 206)
+        ToggleBtn.Text = "TOGGLE: AUTO GET RAREST EGG [OFF]"
+    end
+end)
+
+-- Robust Workspace Scanner with Pcall protection & Transparency Filter
+local function RobustScanner()
     local searchRoots = {
         Workspace:FindFirstChild("Eggs"),
         Workspace:FindFirstChild("FieldEggs"),
@@ -181,51 +295,47 @@ local function DiagnosticScanner()
 
     for _, folder in ipairs(searchRoots) do
         if folder then
-            for _, obj in ipairs(folder:GetChildren()) do
-                if obj:IsA("Model") or obj:IsA("Folder") then
-                    local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-                    local trans = primary and primary.Transparency or 0
-                    local mat = primary and tostring(primary.Material) or "SmoothPlastic"
-                    local col = primary and string.format("R:%.2f G:%.2f B:%.2f", primary.Color.R, primary.Color.G, primary.Color.B) or "N/A"
-                    local uid = tostring(obj:GetAttribute("Uid") or obj.Name)
+            pcall(function()
+                for _, obj in ipairs(folder:GetChildren()) do
+                    if obj:IsA("Model") or obj:IsA("Folder") then
+                        local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                        local trans = (primary and primary.Transparency) or 0
+                        local mat = (primary and tostring(primary.Material)) or "SmoothPlastic"
+                        local uid = tostring(obj:GetAttribute("Uid") or obj.Name)
 
-                    local isSolid = true
-                    if trans >= 0.1 then isSolid = false end
+                        -- Strict Transparency Filter (< 0.1)
+                        local isSolid = true
+                        if trans >= 0.1 then isSolid = false end
 
-                    print(string.format("[Shadow Diagnostics]: Name: %s | Uid: %s | Trans: %.2f | Mat: %s | Color: %s | Solid: %s", 
-                        obj.Name, uid, trans, mat, col, tostring(isSolid)))
+                        if isSolid then
+                            local rarity = "RARE"
+                            local income = "+$50,000/s"
+                            if mat:find("Neon") or mat:find("Glass") then
+                                rarity = "LEGENDARY"
+                                income = "+$500,000/s"
+                            end
 
-                    if isSolid then
-                        local detectedRarity = "RARE"
-                        local incomeRate = "+$50,000/s"
-                        if mat:find("Neon") or mat:find("Glass") then
-                            detectedRarity = "LEGENDARY"
-                            incomeRate = "+$500,000/s"
-                        end
+                            local areaId = obj:GetAttribute("AreaId") or "Forest"
+                            if not SlotKeyRegistry[areaId] then areaId = "Forest" end
+                            local slotKey = obj:GetAttribute("SlotKey") or SlotKeyRegistry[areaId].ValidSlots[1]
 
-                        local areaId = obj:GetAttribute("AreaId") or "Forest"
-                        if not SlotKeyRegistry[areaId] then areaId = "Forest" end
-                        local slotKey = obj:GetAttribute("SlotKey") or SlotKeyRegistry[areaId].ValidSlots[1]
-
-                        if not HubState.ProcessedUids[uid] then
-                            table.insert(HubState.ActiveEggs, {
-                                Uid = uid,
-                                SlotKey = tostring(slotKey),
-                                AssetCategory = obj.Name,
-                                IncomeFormatted = incomeRate,
-                                IncomeVal = ParseIncome(incomeRate),
-                                AreaId = tostring(areaId),
-                                Rarity = detectedRarity,
-                                Transparency = trans,
-                                Material = mat,
-                                ColorInfo = col,
-                                InstanceRef = obj
-                            })
-                            HubState.ProcessedUids[uid] = true
+                            if not HubState.ProcessedUids[uid] then
+                                table.insert(HubState.ActiveEggs, {
+                                    Uid = uid,
+                                    SlotKey = tostring(slotKey),
+                                    AssetCategory = obj.Name,
+                                    IncomeFormatted = income,
+                                    IncomeVal = ParseIncome(income),
+                                    AreaId = tostring(areaId),
+                                    Rarity = rarity,
+                                    InstanceRef = obj
+                                })
+                                HubState.ProcessedUids[uid] = true
+                            end
                         end
                     end
                 end
-            end
+            end)
         end
     end
     RefreshHUD()
@@ -233,9 +343,9 @@ end
 
 task.spawn(function()
     while true do
-        pcall(DiagnosticScanner)
+        pcall(RobustScanner)
         task.wait(1.5)
     end
 end)
 
-print("[Shadow Hub v18.0]: Diagnostic Console Emitter Active!")
+Log("Shadow Hub v19.0 Fully Loaded and Running!")
